@@ -1,0 +1,696 @@
+openapi: 3.1.0
+info:
+  title: EventWise Core API
+  version: 0.1.0
+  description: |
+    Core system for event waste management.
+    All weights are integers in grams.
+    **Clients MUST ignore unknown response fields.** This ensures plugins can extend resources via `extensions` without breaking existing clients.
+  license:
+    name: MIT
+
+servers:
+  - url: https://api.eventwise.co/v1
+    description: Production
+  - url: http://localhost:8080/v1
+    description: Local development
+
+security: []
+
+paths:
+  # ==================== EVENTS ====================
+  /events:
+    get:
+      operationId: getEvents
+      summary: List events
+      parameters:
+        - name: organizerId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, active, verifying, completed]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    post:
+      operationId: createEvent
+      summary: Create event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+
+  /events/{eventId}:
+    get:
+      operationId: getEventById
+      summary: Get event by ID
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '404':
+          $ref: '#/components/responses/ProblemResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+
+  /events/{eventId}/site-approval:
+    post:
+      operationId: approveSites
+      summary: EO approves all sites (transitions event to 'active')
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '409':
+          $ref: '#/components/responses/ProblemResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+
+  /events/{eventId}/progress:
+    get:
+      operationId: getEventProgress
+      summary: Get live progress (aggregated recorded data)
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventProgress'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+
+  /events/{eventId}/daily-confirmation:
+    post:
+      operationId: confirmEventDaily
+      summary: Confirm event final (UNSAFE - requires idempotency key)
+      description: |
+        Admin verifies actual weight from depot. Server calculates points and issues certificate.
+        Deviation between recorded and actual > 10% will be rejected with 422.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmationRequest'
+      responses:
+        '200':
+          description: Confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmationResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/ProblemResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+
+  # ==================== SITES ====================
+  /events/{eventId}/sites:
+    get:
+      operationId: listSites
+      summary: List sites for an event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: rosterId
+          in: query
+          description: Filter sites assigned to a specific roster
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Site'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    post:
+      operationId: createSite
+      summary: Create a site for an event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SiteInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+
+  /sites/{siteId}:
+    get:
+      operationId: getSiteById
+      summary: Get site by ID
+      parameters:
+        - name: siteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+        '404':
+          $ref: '#/components/responses/ProblemResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+
+  # ==================== ROSTERS ====================
+  /rosters:
+    post:
+      operationId: createRoster
+      summary: Create a roster (assign crew to site)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RosterInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Roster'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    get:
+      operationId: listRosters
+      summary: List rosters
+      parameters:
+        - name: eventId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Roster'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+
+  # ==================== DAILY COLLECTIONS ====================
+  /daily-collections:
+    post:
+      operationId: submitDailyCollection
+      summary: Submit batch of collection records (UNSAFE - requires idempotency key)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyCollectionInput'
+      responses:
+        '202':
+          description: Accepted
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+
+components:
+  # ==================== PARAMETERS ====================
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: |
+        UUID v4. Generated by client when user confirms the action, reused for every retry.
+        Retained 24h.
+        - Reuse with different body: returns 409 Conflict with type /problems/idempotency-key-reuse.
+        - Request still processing: returns 409 with Retry-After header.
+
+  # ==================== SCHEMAS ====================
+  schemas:
+    # Extension object for plugins
+    ExtensionObject:
+      type: object
+      additionalProperties: true
+      description: "Plugin extension point. Core ignores this entirely."
+
+    # ---- EVENT ----
+    Event:
+      type: object
+      required: [id, organizerId, name, status]
+      properties:
+        id:
+          type: string
+          example: "evt_001"
+        organizerId:
+          type: string
+          example: "eo_123"
+        name:
+          type: string
+          example: "DWP 2026"
+        scheduledDate:
+          type: string
+          format: date
+          example: "2026-08-30"
+        status:
+          type: string
+          enum: [draft, active, verifying, completed]
+          description: "Clients MUST treat unrecognised status as 'draft'."
+          example: "draft"
+        targetWeight:
+          type: integer
+          description: "Target weight in grams."
+          example: 100000
+        pointsMultiplier:
+          type: number
+          description: "Points per gram."
+          example: 0.5
+        bonusMultiplier:
+          type: number
+          description: "Multiplier if target is met."
+          example: 2.0
+        extensions:
+          $ref: '#/components/schemas/ExtensionObject'
+
+    EventInput:
+      type: object
+      required: [organizerId, name]
+      properties:
+        organizerId:
+          type: string
+          example: "eo_123"
+        name:
+          type: string
+          example: "DWP 2026"
+        scheduledDate:
+          type: string
+          format: date
+          example: "2026-08-30"
+        targetWeight:
+          type: integer
+          example: 100000
+        pointsMultiplier:
+          type: number
+          example: 0.5
+        bonusMultiplier:
+          type: number
+          example: 2.0
+        extensions:
+          $ref: '#/components/schemas/ExtensionObject'
+
+    # ---- SITE ----
+    Site:
+      type: object
+      required: [id, eventId, areaName]
+      properties:
+        id:
+          type: string
+          example: "site_a"
+        eventId:
+          type: string
+          example: "evt_001"
+        areaName:
+          type: string
+          description: "Human-readable location name. Crew uses this on device."
+          example: "Panggung Utama"
+        description:
+          type: string
+          example: "Karung ditaruh di belakang papan skor."
+        status:
+          type: string
+          enum: [proposed, approved, rejected]
+          example: "proposed"
+        latitude:
+          type: [number, 'null']
+          description: "Optional. For mapping plugins on large venues."
+          example: null
+        longitude:
+          type: [number, 'null']
+          description: "Optional. For mapping plugins on large venues."
+          example: null
+        extensions:
+          $ref: '#/components/schemas/ExtensionObject'
+
+    SiteInput:
+      type: object
+      required: [areaName]
+      properties:
+        areaName:
+          type: string
+          example: "Panggung Utama"
+        description:
+          type: string
+          example: "Karung ditaruh di belakang papan skor."
+        latitude:
+          type: [number, 'null']
+          example: null
+        longitude:
+          type: [number, 'null']
+          example: null
+        extensions:
+          $ref: '#/components/schemas/ExtensionObject'
+
+    # ---- ROSTER ----
+    Roster:
+      type: object
+      required: [id, eventId, siteId, crewName, shiftStart, shiftEnd]
+      properties:
+        id:
+          type: string
+          example: "rost_budi"
+        eventId:
+          type: string
+          example: "evt_001"
+        siteId:
+          type: string
+          example: "site_a"
+        crewName:
+          type: string
+          example: "Budi"
+        shiftStart:
+          type: string
+          format: date-time
+          example: "2026-08-30T08:00:00+07:00"
+        shiftEnd:
+          type: string
+          format: date-time
+          example: "2026-08-30T16:00:00+07:00"
+        extensions:
+          $ref: '#/components/schemas/ExtensionObject'
+
+    RosterInput:
+      type: object
+      required: [eventId, siteId, crewName, shiftStart, shiftEnd]
+      properties:
+        eventId:
+          type: string
+          example: "evt_001"
+        siteId:
+          type: string
+          example: "site_a"
+        crewName:
+          type: string
+          example: "Budi"
+        shiftStart:
+          type: string
+          format: date-time
+          example: "2026-08-30T08:00:00+07:00"
+        shiftEnd:
+          type: string
+          format: date-time
+          example: "2026-08-30T16:00:00+07:00"
+        extensions:
+          $ref: '#/components/schemas/ExtensionObject'
+
+    # ---- DAILY COLLECTION ----
+    DailyCollectionInput:
+      type: object
+      required: [eventId, rosterId, shiftDate, records]
+      properties:
+        eventId:
+          type: string
+          example: "evt_001"
+        rosterId:
+          type: string
+          example: "rost_budi"
+        shiftDate:
+          type: string
+          format: date
+          example: "2026-08-30"
+        records:
+          type: array
+          items:
+            type: object
+            required: [siteId, wasteType, weight]
+            properties:
+              siteId:
+                type: string
+                example: "site_a"
+              wasteType:
+                type: string
+                enum: [ORGANIK, ANORGANIK, RESIDU, HAZMAT]
+                description: |
+                  - ORGANIK: Sisa makanan, daun (bisa kompos).
+                  - ANORGANIK: Plastik, logam, kaca, kertas (bisa didaur ulang).
+                  - RESIDU: Sampah campuran kotor yang belum dipilah (bisa dibersihkan/diproses ulang menjadi ANORGANIK).
+                  - HAZMAT: Bahan berbahaya (baterai, lampu). 0 poin.
+                  Clients MUST treat unrecognised values as RESIDU.
+                example: "PLASTIK"
+              weight:
+                type: integer
+                description: "Weight in grams."
+                example: 5000
+              recordedAt:
+                type: string
+                format: date-time
+                example: "2026-08-30T10:30:00+07:00"
+              extensions:
+                $ref: '#/components/schemas/ExtensionObject'
+        extensions:
+          $ref: '#/components/schemas/ExtensionObject'
+
+    # ---- CONFIRMATION ----
+    ConfirmationRequest:
+      type: object
+      required: [adminId, verifiedBreakdown]
+      properties:
+        adminId:
+          type: string
+          example: "adm_001"
+        verifiedBreakdown:
+          type: array
+          description: "Actual breakdown after sorting/cleaning at depot. This OVERRIDES the crew's recorded breakdown for point calculation and reporting."
+          items:
+            type: object
+            required: [wasteType, weight]
+            properties:
+              wasteType:
+                type: string
+                enum: [ORGANIK, ANORGANIK, RESIDU, HAZMAT]
+                example: "ANORGANIK"
+              weight:
+                type: integer
+                description: "Final verified weight in grams."
+                example: 30000
+        extensions:
+          $ref: '#/components/schemas/ExtensionObject'
+
+    ConfirmationResponse:
+      type: object
+      required: [eventId, recordedTotal, verifiedTotal, totalPoints, grade, targetMet, certificateUrl]
+      properties:
+        eventId:
+          type: string
+          example: "evt_001"
+        recordedTotal:
+          type: integer
+          description: "Total from crew records."
+          example: 88000
+        verifiedTotal:
+          type: integer
+          description: "Actual weight from depot."
+          example: 85000
+        hazmatDeducted:
+          type: integer
+          description: "Weight deducted because HAZMAT gives 0 points."
+          example: 5000
+        totalPoints:
+          type: integer
+          example: 40000
+        grade:
+          type: string
+          enum: [BRONZE, SILVER, GOLD]
+          example: "SILVER"
+        targetMet:
+          type: boolean
+          example: false
+        certificateUrl:
+          type: string
+          example: "/reports/cert_001.pdf"
+        reportUrl:
+          type: string
+          description: "LPJ report download URL."
+          example: "/reports/report_001.pdf"
+        verifiedBreakdown:
+          type: array
+          description: "Final breakdown per waste type after depot verification."
+          items:
+            type: object
+            properties:
+              wasteType:
+                type: string
+                enum: [ORGANIK, ANORGANIK, RESIDU, HAZMAT]
+                example: "ANORGANIK"
+              weight:
+                type: integer
+                example: 30000
+
+    # ---- PROGRESS ----
+    EventProgress:
+      type: object
+      required: [eventId, targetWeight, collectedSoFar, percentage, breakdown]
+      properties:
+        eventId:
+          type: string
+          example: "evt_001"
+        targetWeight:
+          type: integer
+          example: 100000
+        collectedSoFar:
+          type: integer
+          description: "Total recorded weight so far (unverified)."
+          example: 88000
+        percentage:
+          type: number
+          description: "Percentage of target achieved."
+          example: 88.0
+        breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              siteName:
+                type: string
+                example: "Panggung Utama"
+              weight:
+                type: integer
+                example: 20000
+
+    # ---- PROBLEM (RFC 9457) ----
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: "Stable URI identifying the problem type."
+          example: "https://api.eventwise.co/problems/deviation-too-high"
+        title:
+          type: string
+          example: "Weight deviation exceeds tolerance"
+        status:
+          type: integer
+          example: 422
+        detail:
+          type: string
+          example: "Recorded 88kg, Actual 75kg. Deviation 14.7% > 10%."
+        instance:
+          type: string
+          format: uri
+          example: "https://api.eventwise.co/v1/events/evt_001/daily-confirmation"
+        deviationPercentage:
+          type: number
+          description: "Extension member for deviation error."
+          example: 14.7
+        expectedHash:
+          type: string
+          description: "Extension member for idempotency reuse error."
+          example: "a1b2c3d4"
+        maxAllowed:
+          type: integer
+          description: "Extension member for invalid weight error."
+          example: 1000000
+
+  # ==================== RESPONSES ====================
+  responses:
+    ProblemResponse:
+      description: "Error response (RFC 9457 Problem Details)"
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    IdempotencyConflict:
+      description: "Idempotency Key reused with different body or still processing"
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
