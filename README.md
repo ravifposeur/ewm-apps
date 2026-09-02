@@ -20,3 +20,10 @@ Platform ini digunakan oleh penyedia jasa waste management untuk mengelola daur 
 ## 📊 Taksonomi 5 Sumbu Klien
 
 ##    Dekomposisi Aturan Bisnis
+**Aturan**: "Selisih berat catatan petugas dengan timbangan depot tidak boleh lebih dari 10%, jika lebih maka konfirmasi ditolak."
+
+| Lapisan | Peran terhadap Aturan |
+| :--- | :--- |
+| **Service** | **Menegakkan**. Server menghitung selisih persentase. Jika > 10%, tolak dengan 422. |
+| **Kontrak** | **Menyatakan**. `POST /confirmation` mengembalikan 422 dengan field `deviationPercentage`. |
+| **Klien** | **Memprediksi**. Web Admin menampilkan peringatan visual jika selisih mendekati 10%, menyembunyikan tombol konfirmasi jika sudah lewat. |
