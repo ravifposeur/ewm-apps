@@ -11,6 +11,13 @@ Alasan utama:
 3. Petugas lapangan secara realistis sering offline di venue padat (stadion/konser).
 4. Mendukung ekosistem plugin karena data timbangan dapat diperkaya oleh add-on (misal: plugin karbon, plugin sponsor).
 
+## Alternatives Considered
+| Alternatif | Alasan Ditolak |
+| :--- | :--- |
+| **Bank Sampah Umum** |  |
+| **Food Delivery** |  |
+| **Manajemen Parkir Event** |  |
+
 ## Consequences
 - **Positif**: Domain ini unik, aplikatif, dan memungkinkan demonstrasi mekanisme *durable queue* dan *idempotency* secara nyata di Pertemuan 6.
 - **Negatif**: Kami harus mendesain skema sinkronisasi batch yang robust di client `device/`.
