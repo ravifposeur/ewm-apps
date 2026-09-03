@@ -18,5 +18,12 @@ Platform ini digunakan oleh penyedia jasa waste management untuk mengelola daur 
 4. **Cakupan kecil**: Satu siklus utuh ( catat offline → data sinkron → verifikasi → terbit sertifikat).
 
 ## 📊 Taksonomi 5 Sumbu Klien
+| Sumbu / Klien | **Web Admin** | **Device Petugas** | **Web EO** | **MCP (Agen AI)** |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Menyimpan rahasia** | Bisa (session cookie) | Bisa (API Key di storage) | Bisa (session cookie) | Bisa (env variable) |
+| **2. Ketersediaan jaringan** | Stabil (kantor) | **Sering tidak tersedia** (venue) | Stabil (kantor) | Stabil (server) |
+| **3. Anggaran latensi** | 1 detik | 5 detik (timbangan) | 2 detik | 10+ detik (batch) |
+| **4. Batas sumber daya** | Tak terbatas | **Terbatas** (baterai kecil) | Tak terbatas | Tak terbatas |
+| **5. Ada manusia?** | Ya (Admin) | Ya (Petugas) | Ya (EO) | **Tidak** (langsung action) |
 
 ##    Dekomposisi Aturan Bisnis
