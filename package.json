@@ -1,0 +1,22 @@
+{
+  "name": "ewm-apps",
+  "version": "0.1.0",
+  "description": "Event Waste Management - Contract Implementation and Conformance Testing",
+  "main": "service/src/app.js",
+  "scripts": {
+    "test:contract": "jest --testPathPattern=tests/contract --runInBand --verbose",
+    "test": "npm run test:contract"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "axios": "^1.7.9",
+    "jest": "^29.7.0",
+    "uuid": "^11.0.5",
+    "yaml": "^2.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 10000
+  }
+}
