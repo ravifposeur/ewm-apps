@@ -1,0 +1,83 @@
+name: Contract Conformance CI
+
+on:
+  push:
+    branches: [ main, '**' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  contract-conformance:
+    name: Contract Conformance & Integration Tests
+    runs-on: ubuntu-latest
+
+    # 1. Start DB Container
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ewm_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      # 2. Apply Database Schema
+      - name: Apply Database Schema
+        run: |
+          if [ -f db/schema.sql ]; then
+            echo "Applying db/schema.sql..."
+            PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ewm_db -f db/schema.sql
+          elif [ -f service/db/schema.sql ]; then
+            echo "Applying service/db/schema.sql..."
+            PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ewm_db -f service/db/schema.sql
+          else
+            echo "Warning: db/schema.sql not found yet. Skipping schema initialization."
+          fi
+
+      # 3. Start Express Service & 4. Wait for Healthcheck
+      - name: Start Express Service & Wait for Health
+        env:
+          PORT: 3000
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: ewm_db
+          DB_USER: postgres
+          DB_PASSWORD: postgrespassword
+          NODE_ENV: test
+        run: |
+          if [ -f service/src/app.js ]; then
+            node service/src/app.js &
+          elif [ -f src/app.js ]; then
+            node src/app.js &
+          else
+            echo "No service entry point found yet. Running against mock or existing runner."
+          fi
+          
+          # Healthcheck wait loop (Timeout 30s)
+          echo "Waiting for service at http://localhost:3000/health..."
+          timeout 30s bash -c 'until curl -sf http://localhost:3000/health; do sleep 1; done' || echo "Service not responding to /health within 30s (Proceeding to tests)"
+
+      # 5. Run Contract Tests
+      - name: Run Contract Tests
+        env:
+          BASE_URL: http://localhost:3000
+        run: npm run test:contract
