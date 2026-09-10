@@ -39,10 +39,7 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci || npm install
-        
-      - name: Install Service Dependencies
-        run: cd service && npm install
-        
+
       # 2. Apply Database Schema
       - name: Apply Database Schema
         run: |
@@ -74,7 +71,7 @@ jobs:
           else
             echo "No service entry point found yet. Running against mock or existing runner."
           fi
-          
+
           # Healthcheck wait loop (Timeout 30s)
           echo "Waiting for service at http://localhost:3000/health..."
           timeout 30s bash -c 'until curl -sf http://localhost:3000/health; do sleep 1; done' || echo "Service not responding to /health within 30s (Proceeding to tests)"
