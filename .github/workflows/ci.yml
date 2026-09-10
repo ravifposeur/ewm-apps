@@ -40,6 +40,9 @@ jobs:
       - name: Install Dependencies
         run: npm ci || npm install
 
+      - name: Install Service Dependencies
+        run: cd service && npm install
+
       # 2. Apply Database Schema
       - name: Apply Database Schema
         run: |
