@@ -10,7 +10,7 @@ const { confirmationSchema } = require('../schemas/confirmation');
 const engine = require('../business/engine');
 
 // Regex pattern for valid event IDs (alphanumeric, hyphens, underscores)
-const VALID_ID_REGEX = /^[a-zA-Z0-9_-]+$/;
+const VALID_ID_REGEX = /^evt_[a-zA-Z0-9]+$/;
 
 // UUID v4 regex untuk validasi Idempotency-Key
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
