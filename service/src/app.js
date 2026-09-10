@@ -26,6 +26,23 @@ app.use('/daily-collections', dailyCollectionsRoute);
 
 app.use(errorHandler);
 
+// Root endpoint — service metadata
+app.get('/', (req, res) => {
+  res.status(200).json({
+    name: 'EWM-Apps Core API',
+    version: '0.1.0',
+    description: 'Event Waste Management Platform — Core Service',
+    documentation: '/docs (coming soon)',
+    health: '/health',
+    spec: 'https://github.com/ravifposeur/ewm-apps/blob/main/openapi.yaml',
+    endpoints: {
+      events: '/v1/events',
+      dailyCollections: '/v1/daily-collections',
+      health: '/health',
+    },
+  });
+});
+
 const PORT = process.env.PORT;
 if (require.main === module) {
   app.listen(PORT, () => {
