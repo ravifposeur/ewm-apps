@@ -55,7 +55,17 @@ jobs:
           else
             echo "Warning: db/schema.sql not found yet. Skipping schema initialization."
           fi
-
+      - name: Apply Database Seed
+        run: |
+          if [ -f service/db/seed.sql ]; then
+            echo "Applying service/db/seed.sql..."
+            PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ewm_db -f service/db/seed.sql
+          elif [ -f db/seed.sql ]; then
+            echo "Applying db/seed.sql..."
+            PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ewm_db -f db/seed.sql
+          else
+            echo "Warning: seed.sql not found"
+          fi
       # 3. Start Express Service & 4. Wait for Healthcheck
       - name: Start Express Service & Wait for Health
         env:

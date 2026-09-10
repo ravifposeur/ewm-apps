@@ -38,11 +38,23 @@ async function findCollectionsByEventId(eventId) {
   return result.rows;
 }
 
+async function insertManyCollections(records, eventId, rosterId) {
+  for (const r of records) {
+    await pool.query(
+      `INSERT INTO collection_records
+       (event_id, roster_id, site_id, waste_type, weight, recorded_at, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [eventId, rosterId, r.siteId, r.wasteType, r.weight, r.recordedAt || new Date(), 'recorded']
+    );
+  }
+}
+
 module.exports = {
   findEventById,
   findAllEvents,
   findIdempotencyKey,
   insertIdempotencyKey,
   findCollectionsByEventId,
+  insertManyCollections,
   pool,
 };
