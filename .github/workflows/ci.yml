@@ -60,6 +60,7 @@ jobs:
       - name: Start Express Service & Wait for Health
         env:
           PORT: 3000
+          DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/ewm_db
           DB_HOST: localhost
           DB_PORT: 5432
           DB_NAME: ewm_db
