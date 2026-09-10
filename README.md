@@ -40,3 +40,7 @@ Platform ini digunakan oleh penyedia jasa waste management untuk mengelola daur 
 | **Service** | **Memvalidasi**. Server menghitung selisih persentase. Jika > 10%, tolak dengan 422. |
 | **Contract** | **Menyatakan**. `POST /confirmation` mengembalikan 422 dengan field `deviationPercentage`. |
 | **Client** | **Memprediksi**. Web Admin menampilkan peringatan visual jika selisih mendekati 10%, menyembunyikan tombol konfirmasi jika sudah lewat. |
+
+## Deployment
+- Base URL: https://ewm-apps.onrender.com
+- Health: https://ewm-apps.onrender.com/health
