@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: EventWise Core API
+  title: EWM-Apps Core API
   version: 0.1.0
   description: |
     Core system for event waste management.
@@ -10,7 +10,7 @@ info:
     name: MIT
 
 servers:
-  - url: https://api.eventwise.co/v1
+  - url: https://api.ewmapps.co/v1
     description: Production
   - url: http://localhost:8080/v1
     description: Local development
@@ -652,7 +652,7 @@ components:
           type: string
           format: uri
           description: "Stable URI identifying the problem type."
-          example: "https://api.eventwise.co/problems/deviation-too-high"
+          example: "https://api.ewmapps.co/problems/deviation-too-high"
         title:
           type: string
           example: "Weight deviation exceeds tolerance"
@@ -665,7 +665,7 @@ components:
         instance:
           type: string
           format: uri
-          example: "https://api.eventwise.co/v1/events/evt_001/daily-confirmation"
+          example: "https://api.ewmapps.co/v1/events/evt_001/daily-confirmation"
         deviationPercentage:
           type: number
           description: "Extension member for deviation error."

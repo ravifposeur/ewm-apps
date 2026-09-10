@@ -2,7 +2,7 @@
 
 function createProblem(type, title, status, detail, instance, extensions = {}) {
   const problem = {
-    type: `/errors/${type}`,
+    type: `/problems/${type}`,       // ← WAJIB: /problems/ bukan /errors/
     title: title,
     status: status,
   };
