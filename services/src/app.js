@@ -13,10 +13,20 @@ const app = express();
 app.use(express.json());
 
 const healthRoute = require('./routes/health');
+const eventsRoute = require('./routes/events');
+const { errorHandler } = require('./problem');
+
 app.use('/health', healthRoute);
+app.use('/v1/events', eventsRoute);
+app.use('/events', eventsRoute);
 
+app.use(errorHandler);
 
-const PORT = process.env.PORT;
-app.listen(PORT, () => {
-    console.log(`Service running on port ${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Service running on port ${PORT}`);
+    });
+}
+
+module.exports = app;
