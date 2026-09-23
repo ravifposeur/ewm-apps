@@ -1,0 +1,130 @@
+{
+  "realm": "eventwise",
+  "enabled": true,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "clientScopes": [
+    {
+      "name": "events:read",
+      "description": "Lihat event, progress, dan sites",
+      "protocol": "openid-connect",
+      "attributes": { "display.on.consent.screen": "false", "include.in.token.scope": "true" }
+    },
+    {
+      "name": "events:write",
+      "description": "Buat event dan site baru",
+      "protocol": "openid-connect",
+      "attributes": { "display.on.consent.screen": "false", "include.in.token.scope": "true" }
+    },
+    {
+      "name": "sites:approve",
+      "description": "Approve semua site (event menjadi active)",
+      "protocol": "openid-connect",
+      "attributes": { "display.on.consent.screen": "false", "include.in.token.scope": "true" }
+    },
+    {
+      "name": "rosters:read",
+      "description": "Lihat roster kru",
+      "protocol": "openid-connect",
+      "attributes": { "display.on.consent.screen": "false", "include.in.token.scope": "true" }
+    },
+    {
+      "name": "rosters:write",
+      "description": "Assign kru ke site",
+      "protocol": "openid-connect",
+      "attributes": { "display.on.consent.screen": "false", "include.in.token.scope": "true" }
+    },
+    {
+      "name": "collections:write",
+      "description": "Submit batch timbangan harian",
+      "protocol": "openid-connect",
+      "attributes": { "display.on.consent.screen": "false", "include.in.token.scope": "true" }
+    },
+    {
+      "name": "confirmations:write",
+      "description": "Konfirmasi akhir dan terbit sertifikat",
+      "protocol": "openid-connect",
+      "attributes": { "display.on.consent.screen": "false", "include.in.token.scope": "true" }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "web-admin",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:3000/callback"],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "optionalClientScopes": ["events:read", "events:write", "sites:approve", "rosters:read", "rosters:write", "collections:write", "confirmations:write"]
+    },
+    {
+      "clientId": "device-crew",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:3000/callback"],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "optionalClientScopes": ["events:read", "rosters:read", "collections:write"]
+    },
+    {
+      "clientId": "web-eo",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:3000/callback"],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "optionalClientScopes": ["events:read", "events:write", "sites:approve", "rosters:read", "rosters:write"]
+    },
+    {
+      "clientId": "reconciliation-job",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "dev-only-secret-GANTI-DI-PROD",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "optionalClientScopes": ["events:read", "confirmations:write"]
+    },
+    {
+      "clientId": "test-cli",
+      "description": "MANUAL SAJA untuk inspeksi token (Step 3 checkpoint). Tidak dipakai client asli.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "optionalClientScopes": ["events:read", "events:write", "sites:approve", "rosters:read", "rosters:write", "collections:write", "confirmations:write"]
+    }
+  ],
+  "users": [
+    { "username": "organizer-a", "enabled": true, "requiredActions": [], "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }] },
+    { "username": "organizer-b", "enabled": true, "requiredActions": [], "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }] },
+    { "username": "crew-a", "enabled": true, "requiredActions": [], "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }] },
+    { "username": "crew-b", "enabled": true, "requiredActions": [], "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }] },
+    { "username": "admin-a", "enabled": true, "requiredActions": [], "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }] },
+    { "username": "admin-b", "enabled": true, "requiredActions": [], "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }] }
+  ]
+}
