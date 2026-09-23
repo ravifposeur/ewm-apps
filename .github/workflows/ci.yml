@@ -77,6 +77,12 @@ jobs:
           DB_USER: postgres
           DB_PASSWORD: postgrespassword
           NODE_ENV: test
+          # OIDC dummy-URL agar startup check (service/src/config.js) lolos.
+          # Nilai test-only sesuai Step 11a/12a: JWKS lokal di 9999 dipakai
+          # test authz; contract test anonim tidak memicu fetch JWKS.
+          OIDC_ISSUER: https://test.local/
+          OIDC_AUDIENCE: eventwise-api
+          OIDC_JWKS_URI: http://127.0.0.1:9999/jwks.json
         run: |
           if [ -f service/src/app.js ]; then
             node service/src/app.js &
