@@ -11,7 +11,7 @@
 services:
   auth:
     image: quay.io/keycloak/keycloak:26.0
-    command: start-dev
+    command: start-dev --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:?set KC_ADMIN_PASSWORD in env, never commit it}
@@ -20,12 +20,20 @@ services:
     volumes:
       # Opsional: persist realm export antar restart (di-gitignore-kan).
       - keycloak-data:/opt/keycloak/data
+      # Realm dev (scope, client, user) diimpor otomatis saat start bila belum ada.
+      # Suffix :z wajib di host ber-SELinux (Fedora) agar file terbaca user container.
+      - ./keycloak/eventwise-realm.json:/opt/keycloak/data/import/eventwise-realm.json:ro,z
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.0\\r\\n\\r' >&3 && head -c 12 <&3 | grep -q 200"]
+      # Cek halaman depan Keycloak. Disengaja TIDAK memakai
+      # /health/ready: endpoint itu 404 di image ini (smallrye-health tidak aktif
+      # secara default). Header Host WAJIB dikirim: tanpanya Keycloak 26 menjawab
+      # 500 (strict hostname handling) — terbukti saat debug 2026-09-23.
+      # Sehat = 200 ATAU 302 (halaman depan me-redirect ke console admin).
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET / HTTP/1.1\\r\\nHost: localhost:8080\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -c 15 <&3 | grep -qE ' 200| 302'"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 20s
+      start_period: 30s
 
 volumes:
   keycloak-data:
