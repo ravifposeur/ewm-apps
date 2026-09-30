@@ -41,6 +41,26 @@ Platform ini digunakan oleh penyedia jasa waste management untuk mengelola daur 
 | **Contract** | **Menyatakan**. `POST /confirmation` mengembalikan 422 dengan field `deviationPercentage`. |
 | **Client** | **Memprediksi**. Web Admin menampilkan peringatan visual jika selisih mendekati 10%, menyembunyikan tombol konfirmasi jika sudah lewat. |
 
+## Workflow Table
+
+| # | Workflow | Screen | Role Permitted | Operation | Scope | Calls/Screen |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | **Check System Health** | Status Page | Public (anonymous) | `GET /health` | — | 1 |
+| 2 | **Browse Event Directory** | Event List | Event Organizer, Admin | `GET /v1/events` | `events:read` | 1 |
+| 3 | **Inspect Event Detail** | Event Detail | Event Organizer, Admin | `GET /v1/events/{eventId}` | `events:read` | 1 |
+| 4 | **Confirm Event Daily** | Confirmation Form | Admin / Depot | `POST /v1/events/{eventId}/daily-confirmation` | `confirmations:write` | 1 |
+| 5 | **Submit Daily Collection** | Collection Form | Field Crew | `POST /v1/daily-collections` | `collections:write` | 1 |
+
+### Mandatory Checks
+
+1. **Every operation exists in `openapi.yaml`:** ✅ verified (see `openapi.yaml` paths)
+2. **Role matches service enforcement:** ✅ verified (see `docs/decisions/0003-autentikasi.md` §3)
+3. **Calls per screen ≤ 3:** ✅ all screens use 1 call
+
+### Blocked Workflows (if any)
+
+_None. All workflows map to existing operations._
+
 ## Deployment
 - Base URL: https://ewm-apps.onrender.com
 - Health: https://ewm-apps.onrender.com/health
