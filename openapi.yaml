@@ -1,13 +1,14 @@
 openapi: 3.1.0
 info:
   title: EWM-Apps Core API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Core system for event waste management.
     All weights are integers in grams.
     **Clients MUST ignore unknown response fields.** This ensures plugins can extend resources via `extensions` without breaking existing clients.
   license:
     name: MIT
+    identifier: MIT
 
 servers:
   - url: https://api.ewmapps.co/v1
@@ -15,14 +16,41 @@ servers:
   - url: http://localhost:8080/v1
     description: Local development
 
-security: []
+# Default: all endpoints REQUIRE OAuth2 with the narrowest scope (events:read).
+# Operations requiring higher privileges declare their own `security` block.
+# Only `/health` is public (security: []).
+security:
+  - oauth2:
+      - events:read
 
 paths:
+  # ==================== HEALTH (PUBLIC) ====================
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      description: "Returns 200 without checking any dependency. Used by the platform to decide whether to restart the process."
+      security: []   # public — no token required
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
   # ==================== EVENTS ====================
   /events:
     get:
       operationId: getEvents
       summary: List events
+      security:
+        - oauth2:
+            - events:read
       parameters:
         - name: organizerId
           in: query
@@ -42,11 +70,19 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Event'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/ProblemResponse'
+
     post:
       operationId: createEvent
       summary: Create event
+      security:
+        - oauth2:
+            - events:write
       requestBody:
         required: true
         content:
@@ -60,6 +96,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Event'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/ProblemResponse'
 
@@ -67,6 +107,9 @@ paths:
     get:
       operationId: getEventById
       summary: Get event by ID
+      security:
+        - oauth2:
+            - events:read
       parameters:
         - name: eventId
           in: path
@@ -80,8 +123,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Event'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/ProblemResponse'
+          description: |
+            Resource not found, OR caller does not have access to the resource.
+            Both conditions return an identical response to prevent ID enumeration.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         default:
           $ref: '#/components/responses/ProblemResponse'
 
@@ -89,6 +142,9 @@ paths:
     post:
       operationId: approveSites
       summary: EO approves all sites (transitions event to 'active')
+      security:
+        - oauth2:
+            - sites:approve
       parameters:
         - name: eventId
           in: path
@@ -102,6 +158,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Event'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/ProblemResponse'
         default:
@@ -111,6 +171,9 @@ paths:
     get:
       operationId: getEventProgress
       summary: Get live progress (aggregated recorded data)
+      security:
+        - oauth2:
+            - events:read
       parameters:
         - name: eventId
           in: path
@@ -124,6 +187,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventProgress'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/ProblemResponse'
 
@@ -134,6 +201,9 @@ paths:
       description: |
         Admin verifies actual weight from depot. Server calculates points and issues certificate.
         Deviation between recorded and actual > 10% will be rejected with 422.
+      security:
+        - oauth2:
+            - confirmations:write
       parameters:
         - name: eventId
           in: path
@@ -154,6 +224,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConfirmationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
         '422':
@@ -166,6 +240,9 @@ paths:
     get:
       operationId: listSites
       summary: List sites for an event
+      security:
+        - oauth2:
+            - events:read
       parameters:
         - name: eventId
           in: path
@@ -186,11 +263,18 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Site'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/ProblemResponse'
     post:
       operationId: createSite
       summary: Create a site for an event
+      security:
+        - oauth2:
+            - events:write
       parameters:
         - name: eventId
           in: path
@@ -210,6 +294,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Site'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/ProblemResponse'
 
@@ -217,6 +305,9 @@ paths:
     get:
       operationId: getSiteById
       summary: Get site by ID
+      security:
+        - oauth2:
+            - events:read
       parameters:
         - name: siteId
           in: path
@@ -230,8 +321,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Site'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/ProblemResponse'
+          description: |
+            Resource not found, OR caller does not have access to the resource.
+            Both conditions return an identical response to prevent ID enumeration.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         default:
           $ref: '#/components/responses/ProblemResponse'
 
@@ -240,6 +341,9 @@ paths:
     post:
       operationId: createRoster
       summary: Create a roster (assign crew to site)
+      security:
+        - oauth2:
+            - rosters:write
       requestBody:
         required: true
         content:
@@ -253,11 +357,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Roster'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/ProblemResponse'
     get:
       operationId: listRosters
       summary: List rosters
+      security:
+        - oauth2:
+            - rosters:read
       parameters:
         - name: eventId
           in: query
@@ -273,6 +384,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Roster'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         default:
           $ref: '#/components/responses/ProblemResponse'
 
@@ -281,6 +396,9 @@ paths:
     post:
       operationId: submitDailyCollection
       summary: Submit batch of collection records (UNSAFE - requires idempotency key)
+      security:
+        - oauth2:
+            - collections:write
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -292,12 +410,42 @@ paths:
       responses:
         '202':
           description: Accepted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
         default:
           $ref: '#/components/responses/ProblemResponse'
 
 components:
+  # ==================== SECURITY ====================
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      description: |
+        OAuth2 Authorization Code + PKCE (public clients) or Client Credentials (confidential job).
+        Tokens are verified as RS256 JWTs with `iss`, `aud`, `exp`, and `scope` claims.
+      flows:
+        authorizationCode:
+          authorizationUrl: http://localhost:8080/realms/eventwise/protocol/openid-connect/auth
+          tokenUrl: http://localhost:8080/realms/eventwise/protocol/openid-connect/token
+          refreshUrl: http://localhost:8080/realms/eventwise/protocol/openid-connect/token
+          scopes:
+            events:read: "Read events, progress, and sites"
+            events:write: "Create events and sites"
+            sites:approve: "Approve all sites (event → active)"
+            rosters:read: "Read crew rosters"
+            rosters:write: "Assign crew to sites"
+            collections:write: "Submit daily collection batches"
+            confirmations:write: "Confirm event final + issue certificate"
+        clientCredentials:
+          tokenUrl: http://localhost:8080/realms/eventwise/protocol/openid-connect/token
+          scopes:
+            events:read: "Read events, progress, and sites"
+            confirmations:write: "Confirm event final + issue certificate"
+
   # ==================== PARAMETERS ====================
   parameters:
     IdempotencyKey:
@@ -522,7 +670,7 @@ components:
                   - RESIDU: Sampah campuran kotor yang belum dipilah (bisa dibersihkan/diproses ulang menjadi ANORGANIK).
                   - HAZMAT: Bahan berbahaya (baterai, lampu). 0 poin.
                   Clients MUST treat unrecognised values as RESIDU.
-                example: "PLASTIK"
+                example: "RESIDU"
               weight:
                 type: integer
                 description: "Weight in grams."
@@ -681,6 +829,26 @@ components:
 
   # ==================== RESPONSES ====================
   responses:
+    Unauthorized:
+      description: "Missing, expired, or invalid access token"
+      headers:
+        WWW-Authenticate:
+          description: "Challenge header for the client"
+          schema:
+            type: string
+          example: 'Bearer realm="api", error="invalid_token"'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    Forbidden:
+      description: "Token is valid, but the scope is insufficient (Layer 2 rejection)"
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
     ProblemResponse:
       description: "Error response (RFC 9457 Problem Details)"
       content:
