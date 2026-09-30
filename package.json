@@ -6,6 +6,9 @@
   "scripts": {
     "test:contract": "OIDC_ISSUER=https://test.local/ OIDC_AUDIENCE=eventwise-api OIDC_JWKS_URI=http://127.0.0.1:9999/jwks.json node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=tests/contract --runInBand --verbose",
     "test:helpers": "OIDC_ISSUER=https://test.local/ OIDC_AUDIENCE=eventwise-api OIDC_JWKS_URI=http://127.0.0.1:9999/jwks.json node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=tests/helpers --runInBand --verbose",
+    "test:authz": "OIDC_ISSUER=https://test.local/ OIDC_AUDIENCE=eventwise-api OIDC_JWKS_URI=http://127.0.0.1:9999/jwks.json node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=tests/authz --runInBand --verbose",
+    "test:e2e": "OIDC_ISSUER=https://test.local/ OIDC_AUDIENCE=eventwise-api OIDC_JWKS_URI=http://127.0.0.1:9999/jwks.json node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=tests/e2e --runInBand --verbose",
+    "test:security": "npm run test:authz && npm run test:e2e",
     "test": "npm run test:contract"
   },
   "devDependencies": {
