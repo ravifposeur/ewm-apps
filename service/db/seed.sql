@@ -16,3 +16,10 @@ VALUES
   ('rost_budi', 'evt_001', 'site_a', 'crew-a', 'Budi',
     '2026-08-30T08:00:00+07:00', '2026-08-30T16:00:00+07:00')
 ON CONFLICT (id) DO NOTHING;
+
+-- Collection records (needed for deviation test)
+INSERT INTO collection_records (event_id, roster_id, site_id, waste_type, weight, recorded_at, status)
+VALUES
+  ('evt_001', 'rost_budi', 'site_a', 'ORGANIK', 5000, '2026-08-30T10:30:00+07:00', 'recorded'),
+  ('evt_001', 'rost_budi', 'site_a', 'ANORGANIK', 3000, '2026-08-30T11:00:00+07:00', 'recorded')
+ON CONFLICT DO NOTHING;
