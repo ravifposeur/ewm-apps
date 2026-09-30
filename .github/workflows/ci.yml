@@ -67,7 +67,7 @@ jobs:
             echo "Warning: seed.sql not found"
           fi
       # 3. Start Express Service & 4. Wait for Healthcheck
-      - name: Start Express Service & Wait for Health
+      - name: Start JWKS Server & Express Service
         env:
           PORT: 3000
           DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/ewm_db
@@ -77,20 +77,26 @@ jobs:
           DB_USER: postgres
           DB_PASSWORD: postgrespassword
           NODE_ENV: test
+          OIDC_ISSUER: https://test.local/
+          OIDC_JWKS_URI: http://127.0.0.1:9999/jwks.json
+          OIDC_AUDIENCE: eventwise-api
         run: |
+          # 1. Start JWKS server (from tests/helpers)
+          node tests/helpers/spin-jwks.js &
+          echo "JWKS PID: $!"
+          sleep 2
+
+          # 2. Verify JWKS reachable
+          curl -sf http://127.0.0.1:9999/jwks.json || echo "JWKS not reachable"
+
+          # 3. Start service
           if [ -f service/src/app.js ]; then
             node service/src/app.js &
-          elif [ -f src/app.js ]; then
-            node src/app.js &
-          else
-            echo "No service entry point found yet. Running against mock or existing runner."
           fi
 
-          # Healthcheck wait loop (Timeout 30s)
+          # 4. Wait for health
           echo "Waiting for service at http://localhost:3000/health..."
-          timeout 30s bash -c 'until curl -sf http://localhost:3000/health; do sleep 1; done' || echo "Service not responding to /health within 30s (Proceeding to tests)"
-
-      # 5. Run Contract Tests
+          timeout 30s bash -c 'until curl -sf http://localhost:3000/health; do sleep 1; done' || echo "Service not responding"      # 5. Run Contract Tests
       - name: Run Contract Tests
         env:
           BASE_URL: http://localhost:3000

@@ -1,4 +1,4 @@
--- Seed data for testing (aligned with test users: organizer-a, crew-a, admin-a)
+-- Seed data aligned with test users (organizer-a, crew-a, admin-a)
 INSERT INTO events (id, organizer_id, name, status, target_weight, points_multiplier, bonus_multiplier)
 VALUES
   ('evt_001', 'organizer-a', 'DWP 2026', 'active', 100000, 0.5, 2.0),

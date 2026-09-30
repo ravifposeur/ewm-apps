@@ -47,6 +47,16 @@ CREATE TABLE collection_records (
   status VARCHAR(20) DEFAULT 'recorded'
 );
 
+CREATE TABLE rosters (
+  id VARCHAR(50) PRIMARY KEY,
+  event_id VARCHAR(50) REFERENCES events(id) ON DELETE CASCADE,
+  site_id VARCHAR(50) REFERENCES sites(id),
+  crew_id VARCHAR(50) NOT NULL,
+  crew_name VARCHAR(100) NOT NULL,
+  shift_start TIMESTAMP WITH TIME ZONE,
+  shift_end TIMESTAMP WITH TIME ZONE
+);
+
 -- Idempotency keys
 CREATE TABLE idempotency_keys (
   key VARCHAR(255) PRIMARY KEY,
