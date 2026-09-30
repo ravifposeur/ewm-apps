@@ -131,3 +131,28 @@ jobs:
           OIDC_ISSUER: https://test.local/
           OIDC_AUDIENCE: eventwise-api
         run: npm run test:helpers
+
+      # 8. Security tests (P5 — Integration Owner)
+      #
+      # Menjalankan dua suite yang membuktikan backend adalah security boundary:
+      #   - tests/authz : write yang ditolak 403 tidak mengubah state (DB unchanged)
+      #   - tests/e2e   : console attack (A.9) — service jawab 403/404, bukan 200
+      #
+      # Butuh service + database yang sudah hidup, jadi baru dijalankan setelah
+      # contract test. Kalau suite ini gagal, berarti "hide button" tanpa
+      # enforcement — kondisi FAIL Session 7.
+      - name: Run AuthZ Tests (write denied, DB unchanged)
+        env:
+          BASE_URL: http://localhost:3000
+          OIDC_JWKS_URI: http://127.0.0.1:9999/jwks.json
+          OIDC_ISSUER: https://test.local/
+          OIDC_AUDIENCE: eventwise-api
+        run: npm run test:authz
+
+      - name: Run Console Attack Tests (A.9)
+        env:
+          BASE_URL: http://localhost:3000
+          OIDC_JWKS_URI: http://127.0.0.1:9999/jwks.json
+          OIDC_ISSUER: https://test.local/
+          OIDC_AUDIENCE: eventwise-api
+        run: npm run test:e2e
