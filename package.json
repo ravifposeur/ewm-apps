@@ -4,8 +4,8 @@
   "description": "Event Waste Management - Contract Implementation and Conformance Testing",
   "main": "service/src/app.js",
   "scripts": {
-    "test:contract": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=tests/contract --runInBand --verbose",
-    "test:helpers": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=tests/helpers --runInBand --verbose",
+    "test:contract": "OIDC_ISSUER=https://test.local/ OIDC_AUDIENCE=eventwise-api OIDC_JWKS_URI=http://127.0.0.1:9999/jwks.json node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=tests/contract --runInBand --verbose",
+    "test:helpers": "OIDC_ISSUER=https://test.local/ OIDC_AUDIENCE=eventwise-api OIDC_JWKS_URI=http://127.0.0.1:9999/jwks.json node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=tests/helpers --runInBand --verbose",
     "test": "npm run test:contract"
   },
   "devDependencies": {
