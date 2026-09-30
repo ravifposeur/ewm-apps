@@ -1,26 +1,23 @@
 // tests/helpers/tokens.test.js
 // TDD RED test untuk tests/helpers/tokens.js (Step 11a).
 // Jalankan: npx jest tests/helpers/tokens.test.js
-// Harapan RED sebelum helper ada: FAIL (Cannot find module './tokens.js').
-// Harapan GREEN sesudah helper selesai: semua test PASS.
 //
 // Kontrak yang diuji (SDD — claim sesuai Step 3 checkpoint):
 // JWT harus membawa iss, aud, sub, scope (spasi), exp yang valid
 // dan terverifikasi via JWKS lokal (tanpa jaringan ke Keycloak).
 
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+const tokens = require('./tokens.js');
 
 const ISSUER = 'https://test.local/';
 const AUDIENCE = 'eventwise-api';
 
-let tokens;
-let jwksServer;
+let jose;
 let baseUrl;
 
 beforeAll(async () => {
+  jose = await import('jose'); // jose v6 ESM-only
   process.env.OIDC_ISSUER = ISSUER;
   process.env.OIDC_AUDIENCE = AUDIENCE;
-  tokens = await import('./tokens.js');
   baseUrl = await tokens.startJwksServer(0); // port 0 = ephemeral, CI-safe
   process.env.OIDC_JWKS_URI = `${baseUrl}/jwks.json`;
 });
@@ -30,8 +27,8 @@ afterAll(async () => {
 });
 
 async function verifyWithJwks(token, { audience = AUDIENCE, issuer = ISSUER } = {}) {
-  const jwks = createRemoteJWKSet(new URL(process.env.OIDC_JWKS_URI));
-  const { payload } = await jwtVerify(token, jwks, {
+  const jwks = jose.createRemoteJWKSet(new URL(process.env.OIDC_JWKS_URI));
+  const { payload } = await jose.jwtVerify(token, jwks, {
     issuer,
     audience,
     algorithms: ['RS256'],
@@ -71,10 +68,27 @@ test('RED-4: audience salah DITOLAK (token API lain tidak diterima service ini)'
   await expect(verifyWithJwks(token, { audience: 'api-lain' })).rejects.toThrow();
 });
 
-test('RED-5: JWKS server lokal menyajikan kunci test-key RS256', async () => {
+test('RED-5: JWKS server lokal menyajikan kunci RS256 dengan kid yang cocok', async () => {
   const res = await fetch(`${baseUrl}/jwks.json`);
   expect(res.status).toBe(200);
   const body = await res.json();
   expect(Array.isArray(body.keys)).toBe(true);
-  expect(body.keys[0]).toMatchObject({ kid: 'test-key', alg: 'RS256', use: 'sig', kty: 'RSA' });
+  // kid WAJIB sama dengan yang dipakai saat menandatangani token, dan
+  // uniknya per proses (lihat catatan KID di tokens.js).
+  const token = await tokens.tokenFor('admin-a', ['events:read']);
+  const header = JSON.parse(
+    Buffer.from(token.split('.')[0], 'base64url').toString()
+  );
+  expect(body.keys[0]).toMatchObject({
+    alg: 'RS256',
+    use: 'sig',
+    kty: 'RSA',
+    kid: header.kid,
+  });
+  expect(header.kid).toMatch(/^test-key-/);
+});
+
+test('RED-6: token kedaluwarsa ditolak (dasar penanganan 401 di sisi client)', async () => {
+  const token = await tokens.tokenFor('admin-a', ['confirmations:write'], { expiresIn: '-1m' });
+  await expect(verifyWithJwks(token)).rejects.toThrow();
 });

@@ -4,7 +4,8 @@
   "description": "Event Waste Management - Contract Implementation and Conformance Testing",
   "main": "service/src/app.js",
   "scripts": {
-    "test:contract": "jest --testPathPattern=tests/contract --runInBand --verbose",
+    "test:contract": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=tests/contract --runInBand --verbose",
+    "test:helpers": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=tests/helpers --runInBand --verbose",
     "test": "npm run test:contract"
   },
   "devDependencies": {
@@ -12,6 +13,7 @@
     "ajv-formats": "^3.0.1",
     "axios": "^1.7.9",
     "jest": "^29.7.0",
+    "jose": "^6.2.12",
     "uuid": "^11.0.5",
     "yaml": "^2.7.0"
   },
