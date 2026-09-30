@@ -1,5 +1,14 @@
 // service/src/problem.js
 
+/**
+ * Build a Problem Details object per RFC 9457.
+ * @param {string} type - Short identifier; akan di-prefix dengan `/problems/`.
+ * @param {string} title - Human-readable summary.
+ * @param {number} status - HTTP status code.
+ * @param {string} [detail] - Specific explanation for this occurrence.
+ * @param {string} [instance] - URI reference for this occurrence.
+ * @param {object} [extensions] - Additional fields (deviationPercentage, expectedHash, dll).
+ */
 function createProblem(type, title, status, detail, instance, extensions = {}) {
   const problem = {
     type: `/problems/${type}`,
@@ -20,24 +29,28 @@ function createProblem(type, title, status, detail, instance, extensions = {}) {
   return problem;
 }
 
+/**
+ * Send a Problem Details response with the correct Content-Type.
+ */
 function sendProblem(res, type, title, status, detail, instance, extensions = {}) {
-  const problem = createProblem(
-    type,
-    title,
-    status,
-    detail,
-    instance,
-    extensions
-  );
-
+  const problem = createProblem(type, title, status, detail, instance, extensions);
   res.setHeader('Content-Type', 'application/problem+json');
-  res.status(status).json(problem);
+  return res.status(status).json(problem);
 }
 
-function unauthorized(res, detail = 'invalid_token') {
+/**
+ * Layer 1 rejection: missing / invalid / expired access token.
+ * MUST include WWW-Authenticate header per RFC 6750.
+ *
+ * @param {object} res - Express response object
+ * @param {string} [detail] - Specific reason (default: 'invalid_token')
+ * @param {string} [instance] - Request path (req.path / req.originalUrl)
+ */
+function unauthorized(res, detail, instance) {
+  const errorCode = detail || 'invalid_token';
   res.setHeader(
     'WWW-Authenticate',
-    `Bearer error="${detail}"`
+    `Bearer realm="api", error="${errorCode}"`
   );
 
   return sendProblem(
@@ -45,10 +58,34 @@ function unauthorized(res, detail = 'invalid_token') {
     'unauthorized',
     'Unauthorized',
     401,
-    detail
+    errorCode,
+    instance
   );
 }
 
+/**
+ * Layer 2 rejection: token valid, but scope is insufficient.
+ * NO WWW-Authenticate header — token is valid, so no need to challenge.
+ *
+ * @param {object} res - Express response object
+ * @param {string} [detail] - Specific reason (e.g., "missing scope: confirmations:write")
+ * @param {string} [instance] - Request path
+ */
+function forbidden(res, detail, instance) {
+  return sendProblem(
+    res,
+    'forbidden',
+    'Forbidden',
+    403,
+    detail || 'Insufficient scope to access this resource',
+    instance
+  );
+}
+
+/**
+ * Global error handler — last middleware. Catches any unhandled error.
+ * Never leaks internal details in production.
+ */
 function errorHandler(err, req, res, next) {
   console.error('Unhandled error:', err);
 
@@ -58,7 +95,7 @@ function errorHandler(err, req, res, next) {
     'An unexpected error occurred',
     500,
     process.env.NODE_ENV === 'development' ? err.message : undefined,
-    req.path
+    req.originalUrl || req.path
   );
 }
 
@@ -66,5 +103,6 @@ module.exports = {
   createProblem,
   sendProblem,
   unauthorized,
-  errorHandler
+  forbidden,
+  errorHandler,
 };
