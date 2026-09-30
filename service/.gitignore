@@ -44,3 +44,4 @@ temp/
 
 # Docker (opsional)
 .dockerignore
+tests/helpers/.test-keys.json

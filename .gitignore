@@ -18,3 +18,4 @@ coverage/
 .DS_Store
 .vscode/
 .idea/
+tests/helpers/.test-keys.json
