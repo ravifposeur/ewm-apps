@@ -66,7 +66,27 @@ jobs:
           else
             echo "Warning: seed.sql not found"
           fi
-      # 3. Start Express Service & 4. Wait for Healthcheck
+      # 3. Start JWKS test server
+      #
+      # URUTAN PENTING: JWKS harus hidup SEBELUM service start.
+      #
+      # Service memakai createRemoteJWKSet yang melakukan CACHE. Kalau JWKS
+      # belum melayani saat token pertama tiba, service mengunduh yang tidak
+      # berguna lalu mengunci kunci itu selamanya — setiap token berikutnya
+      # ditolak dengan ERR_JWKS_NO_MATCHING_KEY.
+      #
+      # Server ini juga yang menandatangani token test lewat POST /sign, jadi
+      # hanya ada SATU keypair untuk service dan test. Kalau test menandatangani
+      # sendiri, kuncinya berbeda dan verifikasi selalu gagal.
+      - name: Start JWKS Test Server
+        env:
+          JWKS_PORT: 9999
+        run: |
+          node tests/helpers/jwks-server.js &
+          timeout 20s bash -c 'until curl -sf http://127.0.0.1:9999/jwks.json > /dev/null; do sleep 0.5; done' \
+            || echo "JWKS test server did not become ready within 20s (Proceeding)"
+
+      # 4. Start Express Service & 5. Wait for Healthcheck
       - name: Start Express Service & Wait for Health
         env:
           PORT: 3000
@@ -77,9 +97,8 @@ jobs:
           DB_USER: postgres
           DB_PASSWORD: postgrespassword
           NODE_ENV: test
-          # OIDC dummy-URL agar startup check (service/src/config.js) lolos.
-          # Nilai test-only sesuai Step 11a/12a: JWKS lokal di 9999 dipakai
-          # test authz; contract test anonim tidak memicu fetch JWKS.
+          # JWKS lokal yang dijalankan pada langkah sebelumnya. Service
+          # memverifikasi signature token test lewat endpoint ini.
           OIDC_ISSUER: https://test.local/
           OIDC_AUDIENCE: eventwise-api
           OIDC_JWKS_URI: http://127.0.0.1:9999/jwks.json
@@ -96,8 +115,20 @@ jobs:
           echo "Waiting for service at http://localhost:3000/health..."
           timeout 30s bash -c 'until curl -sf http://localhost:3000/health; do sleep 1; done' || echo "Service not responding to /health within 30s (Proceeding to tests)"
 
-      # 5. Run Contract Tests
+      # 6. Run Contract Tests
       - name: Run Contract Tests
         env:
           BASE_URL: http://localhost:3000
+          # Test menandatangani token lewat /sign milik JWKS server yang sama,
+          # supaya kunci token sama dengan kunci yang diunduh service.
+          OIDC_JWKS_URI: http://127.0.0.1:9999/jwks.json
+          OIDC_ISSUER: https://test.local/
+          OIDC_AUDIENCE: eventwise-api
         run: npm run test:contract
+
+      # 7. Run Test Helper Suite (token fixture + JWKS server)
+      - name: Run Helper Tests
+        env:
+          OIDC_ISSUER: https://test.local/
+          OIDC_AUDIENCE: eventwise-api
+        run: npm run test:helpers
