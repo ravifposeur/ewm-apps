@@ -58,13 +58,9 @@ jobs:
       - name: Apply Database Seed
         run: |
           if [ -f service/db/seed.sql ]; then
-            echo "Applying service/db/seed.sql..."
-            PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ewm_db -f service/db/seed.sql
-          elif [ -f db/seed.sql ]; then
-            echo "Applying db/seed.sql..."
-            PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ewm_db -f db/seed.sql
-          else
-            echo "Warning: seed.sql not found"
+            PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ewm_db \
+              -v ON_ERROR_STOP=1 \
+              -f service/db/seed.sql
           fi
       # 3. Start JWKS test server
       #
@@ -97,21 +93,24 @@ jobs:
           DB_USER: postgres
           DB_PASSWORD: postgrespassword
           NODE_ENV: test
-          # JWKS lokal yang dijalankan pada langkah sebelumnya. Service
-          # memverifikasi signature token test lewat endpoint ini.
           OIDC_ISSUER: https://test.local/
-          OIDC_AUDIENCE: eventwise-api
           OIDC_JWKS_URI: http://127.0.0.1:9999/jwks.json
+          OIDC_AUDIENCE: eventwise-api
         run: |
+          # 1. Start JWKS server (from tests/helpers)
+          node tests/helpers/spin-jwks.js &
+          echo "JWKS PID: $!"
+          sleep 2
+
+          # 2. Verify JWKS reachable
+          curl -sf http://127.0.0.1:9999/jwks.json || echo "JWKS not reachable"
+
+          # 3. Start service
           if [ -f service/src/app.js ]; then
             node service/src/app.js &
-          elif [ -f src/app.js ]; then
-            node src/app.js &
-          else
-            echo "No service entry point found yet. Running against mock or existing runner."
           fi
 
-          # Healthcheck wait loop (Timeout 30s)
+          # 4. Wait for health
           echo "Waiting for service at http://localhost:3000/health..."
           timeout 30s bash -c 'until curl -sf http://localhost:3000/health; do sleep 1; done' || echo "Service not responding to /health within 30s (Proceeding to tests)"
 

@@ -46,6 +46,24 @@ Seluruh respons kegagalan disajikan dengan header `Content-Type: application/pro
 | Reuse `Idempotency-Key` dengan body berbeda | `409` | `/problems/idempotency-key-reuse` | `expectedHash: "..."` | Generate key baru untuk intent baru. |
 | Error internal tak tertangani | `500` | `/problems/internal-server-error` | `instance` | Hubungi admin dengan `instance` ID. |
 
+## Layer 3 — Object Ownership Inventory
+
+| Handler | Object | Ownership Rule | Failure Response |
+| :--- | :--- | :--- | :--- |
+| `GET /v1/events` | events (collection) | SQL: `organizer_id = principal.subject` (non-service) | empty array |
+| `POST /v1/events` | event (create) | `organizer_id` = `principal.subject` (server-assigned) | N/A |
+| `GET /v1/events/{id}` | event | `principal.subject === event.organizer_id` OR service | **404** |
+| `POST /v1/events/{id}/site-approval` | event | same as above | **404** |
+| `GET /v1/events/{id}/sites` | sites of event | same as above | **404** |
+| `POST /v1/events/{id}/sites` | event | same as above | **404** |
+| `GET /v1/sites/{id}` | site → event | event's owner | **404** |
+| `GET /v1/rosters?eventId=...` | rosters of event | event's owner | **404** |
+| `POST /v1/rosters` | event | event's owner | **404** |
+| `POST /v1/daily-collections` | roster | `principal.subject === roster.crew_id` OR service | **404** |
+| `POST /v1/events/{id}/daily-confirmation` | event | scope `confirmations:write` + event exists | **404** |
+
+**Keras:** "not found" dan "not owned" → **404 identik** (bukan 403). Ini mencegah attacker probe ID existence lewat perbedaan status code.
+
 **Aturan:**
 - Semua error di tabel ini **WAJIB ada di `openapi.yaml`** dengan contoh konkret.
 - Error yang **belum diimplementasi** (misal `duplicate-confirmation`, `in-progress`) **tidak dimasukkan** ke tabel ini sampai diimplementasikan.
