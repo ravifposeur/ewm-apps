@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EventWise Core Platform</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ===================================================================== -->
+    <!-- 1. GLOBAL PROBLEM DETAILS ALERT BANNER (RFC 7807 / RFC 9457)          -->
+    <!-- ===================================================================== -->
+    <div id="alert-container" class="alert-container hidden">
+      <div class="alert-content">
+        <h4 id="alert-title">Application Notice</h4>
+        <p id="alert-detail">A problem occurred.</p>
+        <div class="alert-meta">
+          <span id="alert-status" class="alert-status-tag">HTTP -</span>
+          <span id="alert-type" class="text-muted" style="font-size: 0.75rem; font-family: monospace;"></span>
+        </div>
+      </div>
+      <button id="btn-dismiss-alert" class="btn-close">&times;</button>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- 2. TOPBAR                                                             -->
+    <!-- ===================================================================== -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-logo">🌿</span>
+        <span class="brand-title">EventWise Platform</span>
+        <span class="brand-version">v0.3.0</span>
+      </div>
+      <div class="topbar-right">
+        <div id="header-user-badge" class="user-badge hidden">
+          <span class="user-avatar">👤</span>
+          <strong id="user-display-name">Anonymous</strong>
+          <span id="user-role-badge" class="role-tag">-</span>
+          <button id="btn-header-logout" class="btn btn-sm btn-secondary ml-2">Logout</button>
+        </div>
+        <div id="header-login-prompt">
+          <a href="#/login" class="btn btn-sm btn-primary">Sign In</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- ===================================================================== -->
+    <!-- 3. VIEW CONTAINER: LOGIN VIEW                                         -->
+    <!-- ===================================================================== -->
+    <main id="view-login" class="view-login-container">
+      <div class="login-hero">
+        <h2>Authenticate to EventWise</h2>
+        <p>Select your authorized role to initiate OAuth2 PKCE (S256) flow with Keycloak OIDC.</p>
+      </div>
+
+      <div class="login-role-options">
+        <div class="role-card">
+          <div class="role-icon">🏢</div>
+          <div class="role-details">
+            <h3>Event Organizer</h3>
+            <p>Manage event metadata, submit site plans, and review waste progress.</p>
+            <div class="scopes-tags">
+              <span class="tag">events:read</span>
+              <span class="tag">events:write</span>
+              <span class="tag">sites:approve</span>
+            </div>
+          </div>
+          <button id="btn-login-eo" class="btn btn-primary">Login as Organizer</button>
+        </div>
+
+        <div class="role-card">
+          <div class="role-icon">⚖️</div>
+          <div class="role-details">
+            <h3>Depot Admin</h3>
+            <p>Verify weight records, confirm totals, and manage crew rosters.</p>
+            <div class="scopes-tags">
+              <span class="tag">events:read</span>
+              <span class="tag">confirmations:write</span>
+              <span class="tag">rosters:read</span>
+              <span class="tag">rosters:write</span>
+            </div>
+          </div>
+          <button id="btn-login-admin" class="btn btn-primary">Login as Admin</button>
+        </div>
+
+        <div class="role-card">
+          <div class="role-icon">🚛</div>
+          <div class="role-details">
+            <h3>Collection Crew</h3>
+            <p>Submit daily field waste collection records.</p>
+            <div class="scopes-tags">
+              <span class="tag">events:read</span>
+              <span class="tag">collections:write</span>
+            </div>
+          </div>
+          <button id="btn-login-crew" class="btn btn-primary">Login as Field Crew</button>
+        </div>
+      </div>
+
+      <div class="card" style="text-align: center;">
+        <p class="text-muted" style="font-size: 0.85rem;">
+          🔒 <strong>Security Policy (ADR 0003):</strong> Volatile in-memory token store only. Access tokens are never stored in localStorage or sessionStorage.
+        </p>
+      </div>
+    </main>
+
+    <!-- ===================================================================== -->
+    <!-- 4. VIEW CONTAINER: OAUTH CALLBACK VIEW                                -->
+    <!-- ===================================================================== -->
+    <main id="view-callback" class="view-login-container hidden">
+      <div class="card" style="text-align: center; padding: 3rem 2rem;">
+        <h2>Processing Authorization Callback</h2>
+        <p id="callback-status-text" class="text-muted mt-2">Exchanging authorization code for in-memory token...</p>
+      </div>
+    </main>
+
+    <!-- ===================================================================== -->
+    <!-- 5. VIEW CONTAINER: APP SHELL (AUTHENTICATED)                          -->
+    <!-- ===================================================================== -->
+    <div id="view-app-shell" class="shell-layout hidden">
+      <!-- Sidebar Navigation -->
+      <aside class="shell-sidebar">
+        <span class="sidebar-section-label">Core Navigation</span>
+        <ul id="shell-nav-menu" class="sidebar-nav">
+          <li>
+            <a href="#/" class="nav-item active" data-route="/">
+              <span class="nav-icon">📊</span>
+              <span>Overview</span>
+            </a>
+          </li>
+          <li>
+            <a href="#/health" class="nav-item" data-route="/health">
+              <span class="nav-icon">🩺</span>
+              <span>W1: Health Check</span>
+            </a>
+          </li>
+          <li>
+            <a href="#/events" class="nav-item" data-route="/events">
+              <span class="nav-icon">📋</span>
+              <span>W2: Events Directory</span>
+            </a>
+          </li>
+          <li>
+            <a href="#/collections" class="nav-item" data-route="/collections">
+              <span class="nav-icon">🗑️</span>
+              <span>W5: Daily Collections</span>
+            </a>
+          </li>
+        </ul>
+
+        <span class="sidebar-section-label mt-4">Session Info</span>
+        <div class="card mb-0" style="padding: 0.75rem; font-size: 0.75rem;">
+          <div><strong>Subject:</strong> <span id="session-sub">-</span></div>
+          <div><strong>Client:</strong> <span id="session-client-id">-</span></div>
+        </div>
+      </aside>
+
+      <!-- Main Routed Screen Containers -->
+      <main class="shell-content">
+        <!-- Screen: Overview -->
+        <div id="screen-overview" class="screen-view">
+          <div class="screen-header">
+            <h2>Platform Overview</h2>
+            <p class="text-muted">Live view of authenticated principal and system parameters.</p>
+          </div>
+          <div class="workflow-tiles-grid">
+            <div class="tile-card">
+              <h4>🩺 W1: System Health</h4>
+              <p>Check public backend connectivity without credentials.</p>
+              <a href="#/health" class="btn btn-outline-primary btn-sm">Open Health</a>
+            </div>
+            <div class="tile-card">
+              <h4>📋 W2: Events Directory</h4>
+              <p>Browse events filtered by caller organizer scope.</p>
+              <a href="#/events" class="btn btn-outline-primary btn-sm">Open Events</a>
+            </div>
+            <div class="tile-card">
+              <h4>🗑️ W5: Daily Collections</h4>
+              <p>Field collection record submission.</p>
+              <a href="#/collections" class="btn btn-outline-primary btn-sm">Open Collections</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen: W1 Health Check -->
+        <div id="screen-health" class="screen-view hidden">
+          <div class="screen-header">
+            <h2>Workflow 1 — System Health Check (<code>GET /health</code>)</h2>
+            <p class="text-muted">Public status probe to confirm core service availability.</p>
+          </div>
+          <div class="card">
+            <!-- State: Loading -->
+            <div class="ui-state state-loading hidden" id="w1-state-loading">
+              <div class="skeleton-line" style="width: 50%;"></div>
+              <div class="skeleton-line" style="width: 80%;"></div>
+            </div>
+            <!-- State: Error -->
+            <div class="ui-state state-error hidden" id="w1-state-error">
+              <div class="error-banner">
+                <span class="error-icon">❌</span>
+                <div class="error-content">
+                  <strong class="error-title">Health Check Failed</strong>
+                  <p class="error-detail">Could not reach the backend service.</p>
+                </div>
+                <button class="btn btn-sm btn-danger btn-retry" id="w1-btn-retry">Retry</button>
+              </div>
+            </div>
+            <!-- State: Content -->
+            <div class="ui-state state-content" id="w1-state-content">
+              <div class="mb-3">
+                <button id="btn-probe-health" class="btn btn-primary">Probe <code>/health</code> Now</button>
+                <span id="w1-latency-badge" class="badge badge-outline ml-2 hidden">Latency: - ms</span>
+              </div>
+              <pre id="health-probe-output" class="code-output">Click "Probe /health Now" to verify service connectivity...</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen: W2 Events Directory -->
+        <div id="screen-events" class="screen-view hidden">
+          <div class="screen-header flex-between">
+            <div>
+              <h2>Workflow 2 — Events Directory (<code>GET /v1/events</code>)</h2>
+              <p class="text-muted">List of events accessible to the authenticated principal.</p>
+            </div>
+            <button id="btn-refresh-events" class="btn btn-outline-primary btn-sm">Refresh Events</button>
+          </div>
+          <div class="card">
+            <!-- State: Loading -->
+            <div class="ui-state state-loading hidden" id="w2-state-loading">
+              <div class="skeleton-line" style="width: 60%;"></div>
+              <div class="skeleton-table">
+                <div class="skeleton-row"></div>
+                <div class="skeleton-row"></div>
+                <div class="skeleton-row"></div>
+              </div>
+            </div>
+            <!-- State: Empty -->
+            <div class="ui-state state-empty hidden" id="w2-state-empty">
+              <div class="empty-state-box">
+                <span class="empty-icon">📂</span>
+                <h3>No Events Found</h3>
+                <p>There are no events registered under your organizer account yet.</p>
+              </div>
+            </div>
+            <!-- State: Error -->
+            <div class="ui-state state-error hidden" id="w2-state-error">
+              <div class="error-banner">
+                <span class="error-icon">❌</span>
+                <div class="error-content">
+                  <strong class="error-title" id="w2-error-title">Failed to load events</strong>
+                  <p class="error-detail" id="w2-error-detail">Problem Details message.</p>
+                </div>
+                <button class="btn btn-sm btn-danger btn-retry" id="w2-btn-retry">Retry</button>
+              </div>
+            </div>
+            <!-- State: Content -->
+            <div class="ui-state state-content" id="w2-state-content">
+              <div id="w2-stale-banner" class="stale-banner hidden">
+                <div>
+                  ⚠️ <strong>Showing cached data</strong> &mdash; Latest background refresh failed.
+                </div>
+                <button id="w2-btn-retry-stale" class="btn btn-sm btn-outline-primary">Retry Refresh</button>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Event ID</th>
+                      <th>Event Name</th>
+                      <th>Status</th>
+                      <th>Target Weight (g)</th>
+                      <th>Multiplier</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="events-table-body">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen: W3 Event Detail -->
+        <div id="screen-event-detail" class="screen-view hidden">
+          <div class="screen-header flex-between">
+            <div>
+              <h2>Workflow 3 — Event Detail (<code>GET /v1/events/{id}</code>)</h2>
+              <p class="text-muted">Detailed inspection of a specific event entity.</p>
+            </div>
+            <a href="#/events" class="btn btn-outline-primary btn-sm" data-route="/events">Back to Events</a>
+          </div>
+          <div class="card">
+            <!-- State: Loading -->
+            <div class="ui-state state-loading hidden" id="w3-state-loading">
+              <div class="skeleton-line" style="width: 40%;"></div>
+              <div class="skeleton-line" style="width: 70%;"></div>
+            </div>
+            <!-- State: Error -->
+            <div class="ui-state state-error hidden" id="w3-state-error">
+              <div class="error-banner">
+                <span class="error-icon">❌</span>
+                <div class="error-content">
+                  <strong class="error-title" id="w3-error-title">Event Not Found</strong>
+                  <p class="error-detail" id="w3-error-detail">Resource was not found or is unavailable.</p>
+                </div>
+                <button class="btn btn-sm btn-danger btn-retry" id="w3-btn-retry">Retry</button>
+              </div>
+            </div>
+            <!-- State: Content -->
+            <div class="ui-state state-content" id="w3-state-content">
+              <div id="w3-stale-banner" class="stale-banner hidden">
+                <div>
+                  ⚠️ <strong>Showing cached data</strong> &mdash; Latest background refresh failed.
+                </div>
+                <button id="w3-btn-retry-stale" class="btn btn-sm btn-outline-primary">Retry Refresh</button>
+              </div>
+              <div class="card mb-3" style="background: #f8fafc;">
+                <div class="flex-between mb-2">
+                  <h3 id="detail-event-name">Event Name</h3>
+                  <span id="detail-event-status" class="badge badge-platform">-</span>
+                </div>
+                <p class="text-muted">ID: <code id="detail-event-id">-</code> &middot; Organizer: <code id="detail-organizer-id">-</code></p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                  <div>
+                    <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 0.25rem;">Target Weight</span>
+                    <strong id="detail-target-weight">-</strong>
+                  </div>
+                  <div>
+                    <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 0.25rem;">Points Multiplier</span>
+                    <strong id="detail-points-multiplier">-</strong>
+                  </div>
+                  <div>
+                    <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 0.25rem;">Bonus Multiplier</span>
+                    <strong id="detail-bonus-multiplier">-</strong>
+                  </div>
+                  <div>
+                    <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 0.25rem;">Scheduled Date</span>
+                    <strong id="detail-scheduled-date">-</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="flex-between">
+                <a href="#/events" class="btn btn-secondary btn-sm" data-route="/events">&larr; Back to Events</a>
+                <a id="btn-goto-confirm" href="#/events/evt_001/confirmation" class="btn btn-primary btn-sm" data-route="/events/evt_001/confirmation">Proceed to W4 Daily Confirmation &rarr;</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen: W4 Daily Confirmation -->
+        <div id="screen-confirmation" class="screen-view hidden">
+          <div class="screen-header flex-between">
+            <div>
+              <h2>Workflow 4 — Daily Confirmation (<code>POST /v1/events/{id}/daily-confirmation</code>)</h2>
+              <p class="text-muted">Admin verification and deviation calculation against depot scales.</p>
+            </div>
+            <a id="w4-btn-back-detail" href="#/events" class="btn btn-outline-primary btn-sm" data-route="/events">Back to Event Detail</a>
+          </div>
+
+          <!-- W4 State: Submitting -->
+          <div class="card hidden" id="w4-state-submitting">
+            <div style="text-align: center; padding: 2rem;">
+              <div class="skeleton-line" style="width: 50%; margin: 0 auto 1rem auto;"></div>
+              <p><strong>Submitting Daily Confirmation...</strong></p>
+              <p class="text-muted" style="font-size: 0.85rem;" id="w4-submitting-hint">Sending verified weights to depot engine (Idempotency-Key in flight).</p>
+            </div>
+          </div>
+
+          <!-- W4 State: Concurrency Conflict Banner (412) -->
+          <div class="card hidden" id="w4-state-concurrency-conflict">
+            <div class="concurrency-banner">
+              <span style="font-size: 1.5rem;">⚠️</span>
+              <div style="flex: 1;">
+                <strong class="concurrency-title">Concurrency Conflict (412 Precondition Failed)</strong>
+                <p class="concurrency-detail" id="w4-concurrency-detail">This event was already updated or handled by another user. Latest server data has been loaded.</p>
+                <div class="mt-2" id="w4-concurrency-meta" style="font-size: 0.75rem; font-family: monospace;"></div>
+              </div>
+              <button class="btn btn-sm btn-secondary" id="w4-btn-dismiss-conflict">Dismiss</button>
+            </div>
+          </div>
+
+          <!-- W4 State: Error Banner -->
+          <div class="card hidden" id="w4-state-error">
+            <div class="error-banner">
+              <span class="error-icon">❌</span>
+              <div class="error-content">
+                <strong class="error-title" id="w4-error-title">Submission Failed</strong>
+                <p class="error-detail" id="w4-error-detail">An error occurred while confirming event.</p>
+                <div class="mt-2" id="w4-error-meta" style="font-size: 0.75rem; font-family: monospace;"></div>
+              </div>
+              <button class="btn btn-sm btn-secondary" id="w4-btn-dismiss-error">Dismiss & Edit</button>
+            </div>
+          </div>
+
+          <!-- W4 State: Success Banner & Result -->
+          <div class="card hidden" id="w4-state-success">
+            <div class="success-banner">
+              <div class="flex-between mb-2">
+                <h3>✅ Event Confirmation Approved</h3>
+                <span id="w4-result-grade" class="badge badge-platform">GRADE -</span>
+              </div>
+              <p class="text-muted">Depot verified weight assessment completed successfully.</p>
+              
+              <div class="form-grid-3 mt-3 mb-3">
+                <div>
+                  <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; display: block;">Recorded Total</span>
+                  <strong id="w4-result-recorded">-</strong>
+                </div>
+                <div>
+                  <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; display: block;">Verified Total</span>
+                  <strong id="w4-result-verified">-</strong>
+                </div>
+                <div>
+                  <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; display: block;">Hazmat Deducted</span>
+                  <strong id="w4-result-hazmat">-</strong>
+                </div>
+                <div>
+                  <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; display: block;">Total Points</span>
+                  <strong id="w4-result-points" style="color: var(--primary); font-size: 1.1rem;">-</strong>
+                </div>
+                <div>
+                  <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; display: block;">Target Met?</span>
+                  <span id="w4-result-target-met" class="badge badge-outline">-</span>
+                </div>
+              </div>
+
+              <div class="card mb-3" style="background: #ffffff; padding: 1rem;">
+                <h4 style="font-size: 0.9rem; margin-bottom: 0.5rem;">Verified Breakdown Summary</h4>
+                <div class="table-responsive">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Waste Type</th>
+                        <th>Verified Weight (g)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="w4-result-breakdown-body"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="flex-between">
+                <div class="gap-2" style="display: flex;">
+                  <a id="w4-result-cert-link" href="#" target="_blank" class="btn btn-outline-primary btn-sm">📄 View Certificate</a>
+                  <a id="w4-result-report-link" href="#" target="_blank" class="btn btn-outline-primary btn-sm">📊 View LPJ Report</a>
+                </div>
+                <button id="w4-btn-new-submission" class="btn btn-primary btn-sm">New Confirmation</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- W4 State: Form Container -->
+          <div class="card" id="w4-state-form">
+            <form id="w4-confirmation-form">
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label class="form-label">Event ID <span class="required-indicator">*</span></label>
+                  <input type="text" id="w4-input-event-id" class="form-control" readonly required>
+                  <span class="form-hint">Target event to be confirmed.</span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Admin ID (Authenticated Subject) <span class="required-indicator">*</span></label>
+                  <input type="text" id="w4-input-admin-id" class="form-control" readonly required>
+                  <span class="form-hint">Identity automatically populated from session JWT claims.</span>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Verified Waste Breakdown <span class="required-indicator">*</span></label>
+                <div class="dynamic-rows-container">
+                  <div class="dynamic-row-header">
+                    <span>Waste Category & Weight (Depot Scales)</span>
+                    <button type="button" id="w4-btn-add-row" class="btn btn-sm btn-outline-primary">+ Add Waste Type</button>
+                  </div>
+                  <div id="w4-breakdown-rows">
+                    <!-- Dynamic breakdown rows will be injected here -->
+                  </div>
+                  <div class="dynamic-row-footer">
+                    <span>Total Verified Weight:</span>
+                    <strong id="w4-total-weight-display">0 g</strong>
+                  </div>
+                </div>
+                <div id="w4-breakdown-error" class="form-feedback-error hidden"></div>
+              </div>
+
+              <div class="flex-between mt-4">
+                <div class="idempotency-badge">
+                  <span>🔑 Idempotency-Key:</span>
+                  <span id="w4-idempotency-display">ready</span>
+                </div>
+                <div class="gap-2" style="display: flex;">
+                  <button type="button" id="w4-btn-reset" class="btn btn-secondary btn-sm">Reset Form</button>
+                  <button type="submit" id="w4-btn-submit" class="btn btn-primary btn-sm">Submit Confirmation</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Screen: W5 Daily Collections -->
+        <div id="screen-collections" class="screen-view hidden">
+          <div class="screen-header">
+            <h2>Workflow 5 — Daily Collections (<code>POST /v1/daily-collections</code>)</h2>
+            <p class="text-muted">Field crew waste collection batch submission.</p>
+          </div>
+
+          <!-- W5 State: Submitting -->
+          <div class="card hidden" id="w5-state-submitting">
+            <div style="text-align: center; padding: 2rem;">
+              <div class="skeleton-line" style="width: 50%; margin: 0 auto 1rem auto;"></div>
+              <p><strong>Submitting Field Collection Batch...</strong></p>
+              <p class="text-muted" style="font-size: 0.85rem;" id="w5-submitting-hint">Sending collection records to backend (Idempotency-Key in flight).</p>
+            </div>
+          </div>
+
+          <!-- W5 State: Error Banner -->
+          <div class="card hidden" id="w5-state-error">
+            <div class="error-banner">
+              <span class="error-icon">❌</span>
+              <div class="error-content">
+                <strong class="error-title" id="w5-error-title">Submission Failed</strong>
+                <p class="error-detail" id="w5-error-detail">An error occurred while submitting collection batch.</p>
+                <div class="mt-2" id="w5-error-meta" style="font-size: 0.75rem; font-family: monospace;"></div>
+              </div>
+              <button class="btn btn-sm btn-secondary" id="w5-btn-dismiss-error">Dismiss & Edit</button>
+            </div>
+          </div>
+
+          <!-- W5 State: Success Banner -->
+          <div class="card hidden" id="w5-state-success">
+            <div class="success-banner">
+              <div class="flex-between mb-2">
+                <h3>✅ Daily Collections Recorded (202 Accepted)</h3>
+                <span class="badge badge-platform">recorded</span>
+              </div>
+              <p class="text-muted">Field collection batch successfully accepted and queued for processing.</p>
+              <div class="card mt-3 mb-3" style="background: #ffffff; padding: 1rem;">
+                <p>Accepted Records Count: <strong id="w5-result-count">0</strong></p>
+                <p>Status: <code id="w5-result-status">recorded</code></p>
+              </div>
+              <button id="w5-btn-new-submission" class="btn btn-primary btn-sm">Submit Another Batch</button>
+            </div>
+          </div>
+
+          <!-- W5 State: Form Container -->
+          <div class="card" id="w5-state-form">
+            <form id="w5-collection-form">
+              <div class="form-grid-3">
+                <div class="form-group">
+                  <label class="form-label">Event ID <span class="required-indicator">*</span></label>
+                  <input type="text" id="w5-input-event-id" class="form-control" placeholder="e.g. evt_001" required>
+                  <span class="form-hint">Event where waste was collected.</span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Roster ID <span class="required-indicator">*</span></label>
+                  <input type="text" id="w5-input-roster-id" class="form-control" placeholder="e.g. rost_budi" required>
+                  <span class="form-hint">Caller roster assignment ID.</span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Shift Date <span class="required-indicator">*</span></label>
+                  <input type="date" id="w5-input-shift-date" class="form-control" required>
+                  <span class="form-hint">Date of collection shift.</span>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Collection Records <span class="required-indicator">*</span></label>
+                <div class="dynamic-rows-container">
+                  <div class="dynamic-row-header">
+                    <span>Site & Waste Records</span>
+                    <button type="button" id="w5-btn-add-record" class="btn btn-sm btn-outline-primary">+ Add Record</button>
+                  </div>
+                  <div id="w5-records-rows">
+                    <!-- Dynamic collection rows will be injected here -->
+                  </div>
+                  <div class="dynamic-row-footer">
+                    <span>Total Collected Weight:</span>
+                    <strong id="w5-total-weight-display">0 g</strong>
+                  </div>
+                </div>
+                <div id="w5-records-error" class="form-feedback-error hidden"></div>
+              </div>
+
+              <div class="flex-between mt-4">
+                <div class="idempotency-badge">
+                  <span>🔑 Idempotency-Key:</span>
+                  <span id="w5-idempotency-display">ready</span>
+                </div>
+                <div class="gap-2" style="display: flex;">
+                  <button type="button" id="w5-btn-reset" class="btn btn-secondary btn-sm">Reset Form</button>
+                  <button type="submit" id="w5-btn-submit" class="btn btn-primary btn-sm">Submit Collections</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      EventWise Core Platform &copy; 2026 &middot; Role 3: Client Owner
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
