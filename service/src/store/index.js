@@ -49,16 +49,10 @@ async function insertManyCollections(records, eventId, rosterId) {
   }
 }
 
-async function findRosterById(id) {
-  const result = await pool.query('SELECT * FROM rosters WHERE id = $1', [id]);
-  return result.rows[0];
-}
-
 module.exports = {
   findEventById,
   findAllEvents,
   findIdempotencyKey,
-  findRosterById,
   insertIdempotencyKey,
   findCollectionsByEventId,
   insertManyCollections,

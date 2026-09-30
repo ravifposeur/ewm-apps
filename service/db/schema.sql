@@ -1,9 +1,4 @@
--- ============================================================
--- EWM-Apps Core Service — Database Schema
--- Aligned with openapi.yaml v0.2.0
--- ============================================================
-
--- 1. Events (no FK)
+-- Event table
 CREATE TABLE events (
   id VARCHAR(50) PRIMARY KEY,
   organizer_id VARCHAR(50) NOT NULL,
@@ -17,7 +12,7 @@ CREATE TABLE events (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Sites (FK → events)
+-- Site table
 CREATE TABLE sites (
   id VARCHAR(50) PRIMARY KEY,
   event_id VARCHAR(50) REFERENCES events(id) ON DELETE CASCADE,
@@ -29,18 +24,17 @@ CREATE TABLE sites (
   longitude DECIMAL(11,8)
 );
 
--- 3. Rosters (FK → events, sites)
+-- Roster table
 CREATE TABLE rosters (
   id VARCHAR(50) PRIMARY KEY,
   event_id VARCHAR(50) REFERENCES events(id) ON DELETE CASCADE,
   site_id VARCHAR(50) REFERENCES sites(id),
-  crew_id VARCHAR(50) NOT NULL,
   crew_name VARCHAR(100) NOT NULL,
   shift_start TIMESTAMP WITH TIME ZONE,
   shift_end TIMESTAMP WITH TIME ZONE
 );
 
--- 4. Collection records (FK → events, rosters, sites)
+-- Collection records
 CREATE TABLE collection_records (
   id SERIAL PRIMARY KEY,
   event_id VARCHAR(50) REFERENCES events(id) ON DELETE CASCADE,
@@ -53,7 +47,7 @@ CREATE TABLE collection_records (
   status VARCHAR(20) DEFAULT 'recorded'
 );
 
--- 5. Idempotency keys (no FK)
+-- Idempotency keys
 CREATE TABLE idempotency_keys (
   key VARCHAR(255) PRIMARY KEY,
   body_hash VARCHAR(255) NOT NULL,
