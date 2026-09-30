@@ -1,27 +1,20 @@
 // tests/helpers/tokens.test.js
-// TDD RED test untuk tests/helpers/tokens.js (Step 11a).
+// TDD test untuk tests/helpers/tokens.js.
 // Jalankan: npx jest tests/helpers/tokens.test.js
-// Harapan RED sebelum helper ada: FAIL (Cannot find module './tokens.js').
-// Harapan GREEN sesudah helper selesai: semua test PASS.
-//
-// Kontrak yang diuji (SDD — claim sesuai Step 3 checkpoint):
-// JWT harus membawa iss, aud, sub, scope (spasi), exp yang valid
-// dan terverifikasi via JWKS lokal (tanpa jaringan ke Keycloak).
 
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+const { createRemoteJWKSet, jwtVerify } = require('jose');
 
 const ISSUER = 'https://test.local/';
 const AUDIENCE = 'eventwise-api';
 
 let tokens;
-let jwksServer;
 let baseUrl;
 
 beforeAll(async () => {
   process.env.OIDC_ISSUER = ISSUER;
   process.env.OIDC_AUDIENCE = AUDIENCE;
-  tokens = await import('./tokens.js');
-  baseUrl = await tokens.startJwksServer(0); // port 0 = ephemeral, CI-safe
+  tokens = require('./tokens.js');
+  baseUrl = await tokens.startJwksServer(0);
   process.env.OIDC_JWKS_URI = `${baseUrl}/jwks.json`;
 });
 
@@ -53,20 +46,20 @@ test('RED-1: tokenFor(subject, scopes) menghasilkan JWT dengan claim SDD lengkap
   expect(typeof payload.exp).toBe('number');
 });
 
-test('RED-2: token dengan scope EWM terverifikasi (collections:write, confirmations:write)', async () => {
+test('RED-2: token dengan scope EWM terverifikasi (collections:write)', async () => {
   const token = await tokens.tokenFor('crew-a', ['collections:write']);
   const payload = await verifyWithJwks(token);
   expect(payload.scope.split(' ')).toContain('collections:write');
 });
 
-test('RED-3: payload yang diubah 1 karakter DITOLAK (analogi Layer 1 -> 401)', async () => {
+test('RED-3: payload yang diubah 1 karakter DITOLAK', async () => {
   const token = await tokens.tokenFor('organizer-a', ['events:read']);
   const [h, p, s] = token.split('.');
   const tamperedP = (p[0] === 'A' ? 'B' : 'A') + p.slice(1);
   await expect(verifyWithJwks(`${h}.${tamperedP}.${s}`)).rejects.toThrow();
 });
 
-test('RED-4: audience salah DITOLAK (token API lain tidak diterima service ini)', async () => {
+test('RED-4: audience salah DITOLAK', async () => {
   const token = await tokens.tokenFor('crew-a', ['collections:write']);
   await expect(verifyWithJwks(token, { audience: 'api-lain' })).rejects.toThrow();
 });

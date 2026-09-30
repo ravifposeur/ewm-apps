@@ -1,23 +1,58 @@
 // tests/helpers/tokens.js
-// Helper token lokal untuk pengujian/CI — milik Integration Owner.
-// SDD: claim mengikuti Step 3 checkpoint (iss, aud, exp, sub, scope).
-// TDD: file ini adalah solusi GREEN untuk tests/helpers/tokens.test.js (RED).
-//
-// Strategi: "Local test key (recommended)" — test membangkitkan key pair
-// RS256 sendiri, menyajikan JWKS via HTTP server mini, dan OIDC_ISSUER /
-// OIDC_JWKS_URI diarahkan ke sana selama test. CI tidak butuh jaringan
-// ke Keycloak. Kunci ini HANYA hidup di dalam proses test dan tidak pernah
-// dipakai di service production (issuer test-only, mis. https://test.local/).
+const { createServer } = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const { generateKeyPair, exportJWK, importJWK, SignJWT } = require('jose');
 
-import { createServer } from 'node:http';
-import { generateKeyPair, exportJWK, SignJWT } from 'jose';
+const KEY_FILE = path.join(__dirname, '.test-keys.json');
 
-const { publicKey, privateKey } = await generateKeyPair('RS256');
-const jwk = { ...(await exportJWK(publicKey)), kid: 'test-key', alg: 'RS256', use: 'sig' };
+let publicKey = null;
+let privateKey = null;
+let jwk = null;
+let readyPromise = null;
 
-// Server JWKS mini — satu instance per proses test.
-// Kompatibel dengan bentuk di assignment: `export const jwksServer`.
-export const jwksServer = createServer((req, res) => {
+async function loadOrCreateKeys() {
+  // Kalau file key sudah ada, pakai itu (biar semua proses sama)
+  if (fs.existsSync(KEY_FILE)) {
+    const saved = JSON.parse(fs.readFileSync(KEY_FILE, 'utf8'));
+    publicKey = await importJWK(saved.publicJwk, 'RS256');
+    privateKey = await importJWK(saved.privateJwk, 'RS256');
+    jwk = saved.publicJwk;
+    return;
+  }
+
+  // Kalau belum ada, generate baru + simpan
+  const pair = await generateKeyPair('RS256', { extractable: true });
+  const publicJwk = {
+    ...(await exportJWK(pair.publicKey)),
+    kid: 'test-key',
+    alg: 'RS256',
+    use: 'sig',
+  };
+  const privateJwk = {
+    ...(await exportJWK(pair.privateKey)),
+    kid: 'test-key',
+    alg: 'RS256',
+  };
+
+  fs.writeFileSync(
+    KEY_FILE,
+    JSON.stringify({ publicJwk, privateJwk }, null, 2)
+  );
+
+  publicKey = pair.publicKey;
+  privateKey = pair.privateKey;
+  jwk = publicJwk;
+}
+
+async function initKeys() {
+  if (jwk) return;
+  if (readyPromise) return readyPromise;
+  readyPromise = loadOrCreateKeys();
+  return readyPromise;
+}
+
+const jwksServer = createServer((req, res) => {
   if (req.url && !req.url.startsWith('/jwks')) {
     res.statusCode = 404;
     res.end('not-found');
@@ -29,8 +64,8 @@ export const jwksServer = createServer((req, res) => {
 
 let listeningUrl = null;
 
-/** Nyalakan server JWKS di port tertentu (0 = ephemeral, aman untuk CI paralel). */
-export function startJwksServer(port = 0) {
+async function startJwksServer(port = 0) {
+  await initKeys();
   return new Promise((resolve, reject) => {
     jwksServer.once('error', reject);
     jwksServer.listen(port, '127.0.0.1', () => {
@@ -41,29 +76,32 @@ export function startJwksServer(port = 0) {
   });
 }
 
-/** Matikan server JWKS (dipanggil di afterAll). */
-export function stopJwksServer() {
+function stopJwksServer() {
   return new Promise((resolve) => {
     if (!jwksServer.listening) return resolve();
     jwksServer.close(() => resolve());
   });
 }
 
-/**
- * Buat JWT pengujian yang valid sesuai spesifikasi claim:
- * iss=OIDC_ISSUER, aud=OIDC_AUDIENCE, sub=subject,
- * scope=scopes.join(' '), exp=+5 menit, alg RS256/kid test-key.
- *
- * @param {string} subject - mis. 'organizer-a', 'crew-a', 'admin-a'
- * @param {string[]} scopes - mis. ['events:read', 'collections:write']
- */
-export function tokenFor(subject, scopes) {
+async function tokenFor(subject, scopes, opts = {}) {
+  await initKeys();
+  const issuer = opts.issuer || process.env.OIDC_ISSUER;
+  const audience = opts.audience || process.env.OIDC_AUDIENCE;
+  const expiresIn = opts.expiresIn || '5m';
+
   return new SignJWT({ scope: scopes.join(' ') })
-    .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
-    .setIssuer(process.env.OIDC_ISSUER)
-    .setAudience(process.env.OIDC_AUDIENCE)
+    .setProtectedHeader({ alg: 'RS256', kid: 'test-key', typ: 'Bearer' })
+    .setIssuer(issuer)
+    .setAudience(audience)
     .setSubject(subject)
     .setIssuedAt()
-    .setExpirationTime('5m')
+    .setExpirationTime(expiresIn)
     .sign(privateKey);
 }
+
+module.exports = {
+  jwksServer,
+  startJwksServer,
+  stopJwksServer,
+  tokenFor,
+};

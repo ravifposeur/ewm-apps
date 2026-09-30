@@ -28,6 +28,12 @@ async function authenticate(req, res, next) {
     req.principal = principalFrom(claims);
     return next();
   } catch (err) {
+    // DEBUG: log actual error
+    console.warn('[AUTH DEBUG]', err.code, err.message);
+    console.warn('[AUTH DEBUG] expected issuer:', process.env.OIDC_ISSUER);
+    console.warn('[AUTH DEBUG] expected audience:', process.env.OIDC_AUDIENCE);
+    console.warn('[AUTH DEBUG] jwks uri:', process.env.OIDC_JWKS_URI);
+
     const reason = err.code || err.name || 'invalid_token';
     if (req.log && typeof req.log.warn === 'function') {
       req.log.warn({ reason }, 'Token rejected');
