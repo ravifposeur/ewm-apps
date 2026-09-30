@@ -100,4 +100,7 @@ jobs:
       - name: Run Contract Tests
         env:
           BASE_URL: http://localhost:3000
+          OIDC_ISSUER: https://test.local/
+          OIDC_JWKS_URI: http://127.0.0.1:9999/jwks.json
+          OIDC_AUDIENCE: eventwise-api
         run: npm run test:contract
