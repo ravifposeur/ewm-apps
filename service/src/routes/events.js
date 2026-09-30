@@ -13,6 +13,9 @@ const engine = require('../business/engine');
 const { requireScope } = require('../auth/require-scope');
 const ownership = require('../auth/ownership');
 
+// Tambahkan import ETag
+const { generateETag } = require('../representations/etag');
+
 const VALID_ID_REGEX = /^[a-zA-Z0-9_-]+$/;
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -42,7 +45,17 @@ router.get('/', requireScope('events:read'), async (req, res, next) => {
       filters.organizerId = req.principal.subject;
     }
     const rows = await store.findAllEvents(filters);
-    return res.status(200).json(representEventList(rows || []));
+    const rep = representEventList(rows || []);
+    
+    // ETag: Conditional Read
+    const etag = generateETag(rep);
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+    return res.status(200).json(rep);
   } catch (err) { next(err); }
 });
 
@@ -103,6 +116,14 @@ router.post('/:eventId/daily-confirmation', requireScope('confirmations:write'),
       return notFound(res, req, eventId);
     }
 
+    // ETag: Conditional Write Check
+    const currentEtag = generateETag(event);
+    const ifMatch = req.headers['if-match'];
+    if (ifMatch && ifMatch !== currentEtag) {
+       return sendProblem(res, 'precondition-failed', 'Precondition Failed', 412,
+         'Entity was modified by someone else', req.originalUrl);
+    }
+
     const records = await store.findCollectionsByEventId(eventId);
     const recordedTotal = (records || []).reduce((s, r) => s + (r.weight || 0), 0);
     const multiplier = parseFloat(event.points_multiplier) || 0.5;
@@ -137,12 +158,118 @@ router.post('/:eventId/daily-confirmation', requireScope('confirmations:write'),
 });
 
 // ==========================================================================
-// Sub-resources of event (stubs — Layer 2 mounted, work TODO)
+// Sub-resources of event 
 // ==========================================================================
-router.get('/:eventId/progress', requireScope('events:read'), (req, res) => notImplemented(res, req));
-router.get('/:eventId/sites', requireScope('events:read'), (req, res) => notImplemented(res, req));
-router.post('/:eventId/sites', requireScope('events:write'), (req, res) => notImplemented(res, req));
-router.post('/:eventId/site-approval', requireScope('sites:approve'), (req, res) => notImplemented(res, req));
+router.get('/:eventId/progress', requireScope('events:read'), async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    if (!VALID_ID_REGEX.test(eventId)) {
+      return sendProblem(res, 'invalid-id', 'Bad Request', 400, `Malformed event ID: '${eventId}'`, req.originalUrl);
+    }
+
+    const event = await store.findEventById(eventId);
+    // Layer 3 Check
+    if (!event || !ownership.mayReadEvent(req.principal, event)) {
+      return notFound(res, req, eventId);
+    }
+
+    // Asumsi fungsi findCollectionsByEventId sudah ada
+    const records = await store.findCollectionsByEventId(eventId);
+    const recordedTotal = (records || []).reduce((s, r) => s + (r.weight || 0), 0);
+    const targetWeight = event.target_weight || 0;
+    
+    const progress = {
+      eventId,
+      recordedTotal,
+      targetWeight,
+      targetMet: recordedTotal >= targetWeight
+    };
+
+    const etag = generateETag(progress);
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    return res.status(200).json(progress);
+  } catch (err) { next(err); }
+});
+
+router.get('/:eventId/sites', requireScope('events:read'), async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    if (!VALID_ID_REGEX.test(eventId)) {
+      return sendProblem(res, 'invalid-id', 'Bad Request', 400, `Malformed event ID: '${eventId}'`, req.originalUrl);
+    }
+
+    const event = await store.findEventById(eventId);
+    // Layer 3 Check
+    if (!event || !ownership.mayReadEvent(req.principal, event)) {
+      return notFound(res, req, eventId);
+    }
+
+    // Asumsi fungsi findAllSitesByEventId sudah ada di store
+    const sites = await store.findAllSitesByEventId(eventId);
+    
+    const etag = generateETag(sites || []);
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    return res.status(200).json(sites || []);
+  } catch(err) { next(err); }
+});
+
+router.post('/:eventId/sites', requireScope('events:write'), async (req, res, next) => {
+   try {
+    const { eventId } = req.params;
+    if (!VALID_ID_REGEX.test(eventId)) {
+      return sendProblem(res, 'invalid-id', 'Bad Request', 400, `Malformed event ID: '${eventId}'`, req.originalUrl);
+    }
+
+    const event = await store.findEventById(eventId);
+    // Layer 3 Check
+    if (!event || !ownership.mayWriteEvent(req.principal, event)) {
+      return notFound(res, req, eventId);
+    }
+
+    // Logic insert site asumsikan ada di store
+    const newSite = await store.insertSite({ eventId, ...req.body });
+    return res.status(201).location(`/v1/sites/${newSite.id}`).json(newSite);
+  } catch(err) { next(err); }
+});
+
+router.post('/:eventId/site-approval', requireScope('sites:approve'), async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    if (!VALID_ID_REGEX.test(eventId)) {
+      return sendProblem(res, 'invalid-id', 'Bad Request', 400, `Malformed event ID: '${eventId}'`, req.originalUrl);
+    }
+
+    const event = await store.findEventById(eventId);
+    // Layer 3 Check
+    if (!event || !ownership.mayApproveSites(req.principal, event)) {
+      return notFound(res, req, eventId);
+    }
+
+    // ETag: Conditional Write Check
+    const currentEtag = generateETag(event);
+    const ifMatch = req.headers['if-match'];
+    if (ifMatch && ifMatch !== currentEtag) {
+       return sendProblem(res, 'precondition-failed', 'Precondition Failed', 412,
+         'Entity was modified by someone else', req.originalUrl);
+    }
+
+    // Asumsi fungsi updateAllSitesStatus ada di store
+    await store.updateAllSitesStatus(eventId, 'approved');
+    return res.status(200).json({ message: 'Sites approved' });
+  } catch(err) { next(err); }
+});
 
 // ==========================================================================
 // GET /events/:eventId — single entity (MUST be last)
@@ -158,7 +285,19 @@ router.get('/:eventId', requireScope('events:read'), async (req, res, next) => {
     if (!event || !ownership.mayReadEvent(req.principal, event)) {
       return notFound(res, req, eventId);
     }
-    return res.status(200).json(representEvent(event));
+    
+    const rep = representEvent(event);
+    
+    // ETag: Conditional Read
+    const etag = generateETag(rep);
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    return res.status(200).json(rep);
   } catch (err) { next(err); }
 });
 
