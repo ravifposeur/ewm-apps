@@ -1,6 +1,7 @@
 // service/src/app.js
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors'); // Tambahkan import cors
 const { config } = require('./config');
 const { logger } = require('./logger');
 const { authenticate } = require('./auth/authenticate');
@@ -9,6 +10,30 @@ const { errorHandler, sendProblem } = require('./problem');
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use((req, res, next) => { req.log = logger; next(); });
+
+// Konfigurasi CORS (Tugas 1)
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',       // dev web app
+  'http://localhost:3000',       // dev alternative
+  'https://ewm-web.onrender.com' // production web app (ganti nanti jika diperlukan)
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Izinkan requests tanpa origin (misal dari Postman, curl, backend lain)
+    if (!origin) return callback(null, true);
+    
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'), false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'If-Match', 'If-None-Match'],
+  exposedHeaders: ['ETag', 'Location'],
+  maxAge: 600, // cache preflight OPTIONS 10 menit
+}));
 
 // Public
 const healthRoute = require('./routes/health');
