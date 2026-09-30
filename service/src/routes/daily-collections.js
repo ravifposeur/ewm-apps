@@ -54,6 +54,9 @@ router.post('/', async (req, res, next) => {
 
     return res.status(202).json(responseBody);
   } catch (err) {
+    console.error('[daily-collections ERROR]', err);
+    console.error('[daily-collections ERROR] message:', err.message);
+    console.error('[daily-collections ERROR] stack:', err.stack);
     next(err);
   }
 });
