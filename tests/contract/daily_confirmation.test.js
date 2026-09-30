@@ -4,7 +4,7 @@ const { validateSchema, validateProblemDetails } = require('./helpers/validator'
 
 describe('POST /events/{eventId}/daily-confirmation (Business Logic & Confirmation Conformance)', () => {
   // Admin confirms → scope confirmations:write
-  const client = createAuthedClient({ subject: 'admin-a', scopes: ['confirmations:write'] });
+  const client = createAuthedClient({ subject: 'organizer-a', scopes: ['confirmations:write'] });
 
   const validConfirmationPayload = {
     adminId: 'adm_001',
