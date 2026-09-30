@@ -26,3 +26,15 @@
 
 ### Notes
 - The rule "identical `404` for missing vs not-owned" is enforced at Layer 3 (object check) by the Client Owner.
+
+## 0.3.0 - 30 SEPTEMBER 2026
+
+### Added
+- **A.7 Conditional Reads:** `If-None-Match` parameter + `ETag` response header + `Vary: Origin` pada `GET /v1/events`, dengan response `304 Not Modified`.
+- **A.8 Conditional Writes:** `If-Match` parameter + response `ETag` pada `POST /v1/events/{eventId}/daily-confirmation`, dengan response `412 Precondition Failed`.
+- **Problem Details:** extension member `currentEtag` untuk membantu klien refresh saat 412.
+- **Components:** `PreconditionFailed` response reusable.
+
+### Notes
+- Non-breaking: semua header opsional. Klien lama tetap kompatibel.
+- Version bumped minor: `0.2.0` → `0.3.0`.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EWM-Apps Core API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Core system for event waste management.
     All weights are integers in grams.
@@ -61,15 +61,37 @@ paths:
           schema:
             type: string
             enum: [draft, active, verifying, completed]
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: |
+            ETag dari response sebelumnya. Jika resource belum berubah,
+            server mengembalikan 304 Not Modified tanpa body.
+          example: '"abc123def"'
       responses:
         '200':
           description: OK
+          headers:
+            ETag:
+              description: Opaque version marker untuk conditional reads.
+              schema:
+                type: string
+              example: '"abc123def"'
+            Vary:
+              description: Cache hint — response varies by origin.
+              schema:
+                type: string
+              example: "Origin"
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Event'
+        '304':
+          description: Not Modified — resource belum berubah sejak ETag terakhir.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -211,6 +233,15 @@ paths:
           schema:
             type: string
         - $ref: '#/components/parameters/IdempotencyKey'
+        - name: If-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: |
+            ETag versi terakhir yang dilihat klien. Jika entity sudah diubah
+            oleh pihak lain, server mengembalikan 412 Precondition Failed.
+          example: '"abc123def"'
       requestBody:
         required: true
         content:
@@ -220,6 +251,12 @@ paths:
       responses:
         '200':
           description: Confirmed
+          headers:
+            ETag:
+              description: ETag baru setelah entity di-update.
+              schema:
+                type: string
+              example: '"newEtag456"'
           content:
             application/json:
               schema:
@@ -230,6 +267,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
         '422':
           $ref: '#/components/responses/ProblemResponse'
         default:
@@ -826,7 +865,12 @@ components:
           type: integer
           description: "Extension member for invalid weight error."
           example: 1000000
-
+        currentEtag:
+          type: string
+          description: |
+            ETag terkini saat 412 Precondition Failed — klien bisa langsung
+            refresh tanpa request ulang.
+          example: '"newEtag456"'
   # ==================== RESPONSES ====================
   responses:
     Unauthorized:
@@ -858,6 +902,12 @@ components:
 
     IdempotencyConflict:
       description: "Idempotency Key reused with different body or still processing"
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PreconditionFailed:
+      description: "Precondition Failed — entity telah berubah oleh pihak lain (A.8)"
       content:
         application/problem+json:
           schema:
