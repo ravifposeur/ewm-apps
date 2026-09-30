@@ -55,7 +55,8 @@ function mayWriteCollection(principal, roster) {
  */
 function mayConfirmEvent(principal, event) {
   if (!principal || !event) return false;
-  return true;
+  if (isService(principal)) return true;
+  return isOwner(principal, event.organizer_id);
 }
 
 module.exports = {
