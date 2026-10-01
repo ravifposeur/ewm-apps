@@ -7,11 +7,56 @@ const pool = new Pool({
 
 async function findEventById(id) {
   const result = await pool.query('SELECT * FROM events WHERE id = $1', [id]);
-  return result.rows[0];
+  const event = result.rows[0];
+  if (!event) return null;
+
+  // Load assigned admins (Layer 3)
+  const admins = await pool.query(
+    'SELECT admin_id FROM event_admins WHERE event_id = $1',
+    [id]
+  );
+  event._assigned_admin_ids = admins.rows.map((r) => r.admin_id);
+  return event;
 }
 
-async function findAllEvents() {
-  const result = await pool.query('SELECT * FROM events');
+async function findAllEvents(filters = {}) {
+  const conditions = [];
+  const values = [];
+
+  if (filters.organizerId) {
+    values.push(filters.organizerId);
+    // Match owner OR assigned admin
+    conditions.push(
+      `(e.organizer_id = $${values.length} OR ea.admin_id = $${values.length})`
+    );
+  }
+  if (filters.status) {
+    values.push(filters.status);
+    conditions.push(`e.status = $${values.length}`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const limit = filters.limit || 20;
+  values.push(limit);
+
+  const sql = `
+    SELECT DISTINCT e.* FROM events e
+    LEFT JOIN event_admins ea ON ea.event_id = e.id
+    ${where}
+    ORDER BY e.created_at DESC
+    LIMIT $${values.length}
+  `;
+  const result = await pool.query(sql, values);
+
+  // Load assigned admins untuk setiap event (biar konsisten dengan findEventById)
+  for (const event of result.rows) {
+    const admins = await pool.query(
+      'SELECT admin_id FROM event_admins WHERE event_id = $1',
+      [event.id]
+    );
+    event._assigned_admin_ids = admins.rows.map((r) => r.admin_id);
+  }
+
   return result.rows;
 }
 

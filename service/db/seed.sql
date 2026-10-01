@@ -74,6 +74,11 @@ VALUES
   ('evt_004', 'rost_dewi',  'site_a',  'HAZMAT',     500, '2026-07-20T12:00:00+07:00', 'verified')
 ON CONFLICT DO NOTHING;
 
+-- Admin assignments
+INSERT INTO event_admins (event_id, admin_id) VALUES
+  ('evt_001', 'admin-a'),
+  ('evt_002', 'admin-b')
+ON CONFLICT DO NOTHING;
 -- ============================================================
 -- 5. SANITY CHECKS (opsional — untuk verifikasi manual)
 -- ============================================================

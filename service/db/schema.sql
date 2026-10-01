@@ -40,6 +40,14 @@ CREATE TABLE rosters (
   shift_end TIMESTAMP WITH TIME ZONE
 );
 
+-- Event-Admin assignment (many-to-many)
+CREATE TABLE event_admins (
+  event_id VARCHAR(50) REFERENCES events(id) ON DELETE CASCADE,
+  admin_id VARCHAR(50) NOT NULL,
+  assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (event_id, admin_id)
+);
+
 -- 4. Collection records (FK → events, rosters, sites)
 CREATE TABLE collection_records (
   id SERIAL PRIMARY KEY,
