@@ -17,6 +17,13 @@
 // jose v6 adalah ESM-only, jadi di-load lewat dynamic import() — bukan
 // require(). Dynamic import butuh flag Jest --experimental-vm-modules, yang
 // sudah dipasang di script `test:contract` (package.json).
+const DEV_USERS = {
+  'organizer-a': { password: 'organizer123', scopes: ['events:read', 'events:write', 'sites:approve'] },
+  'organizer-b': { password: 'organizer123', scopes: ['events:read', 'events:write', 'sites:approve'] },
+  'admin-a':     { password: 'admin123',     scopes: ['events:read', 'confirmations:write'] },
+  'crew-a':      { password: 'crew123',      scopes: ['events:read', 'collections:write'] },
+  'crew-b':      { password: 'crew123',      scopes: ['events:read', 'collections:write'] },
+};
 
 const { createServer } = require('node:http');
 
@@ -78,6 +85,12 @@ const jwksServer = createServer((req, res) => {
     handleSign(req, res);
     return;
   }
+
+  if (req.url && req.url.startsWith('/login')) {
+    handleLogin(req, res);
+    return;
+  }
+
   if (req.url && !req.url.startsWith('/jwks')) {
     res.statusCode = 404;
     res.end('not-found');
@@ -121,6 +134,46 @@ function handleSign(req, res) {
       })
       .catch(() => {
         res.statusCode = 500;
+        res.end('{"error":"sign-failed"}');
+      });
+  });
+}
+/** POST /login {username, password} -> {token, sub, scopes}. */
+function handleLogin(req, res) {
+  let body = '';
+  req.on('data', (chunk) => { body += chunk; });
+  req.on('end', () => {
+    let payload = {};
+    try {
+      payload = body ? JSON.parse(body) : {};
+    } catch {
+      res.statusCode = 400;
+      res.setHeader('content-type', 'application/json');
+      res.end('{"error":"bad-json"}');
+      return;
+    }
+
+    const { username, password } = payload;
+    const user = DEV_USERS[username];
+
+    if (!user || user.password !== password) {
+      res.statusCode = 401;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({
+        type: '/problems/invalid-credentials',
+        title: 'Invalid username or password',
+      }));
+      return;
+    }
+
+    tokenFor(username, user.scopes, {})
+      .then((token) => {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ token, sub: username, scopes: user.scopes }));
+      })
+      .catch(() => {
+        res.statusCode = 500;
+        res.setHeader('content-type', 'application/json');
         res.end('{"error":"sign-failed"}');
       });
   });

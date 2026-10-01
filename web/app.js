@@ -1,6 +1,4 @@
-// web/app.js
-// EventWise browser client — dev-login via local JWKS server.
-// Works without Keycloak: fetch token from http://127.0.0.1:9999/sign.
+// web/app.js — EventWise browser client (username+password login via JWKS)
 
 // ============================================================================
 // CONFIG
@@ -11,7 +9,7 @@ const CONFIG = {
 };
 
 // ============================================================================
-// TOKEN STORE (in-memory, per ADR 0003)
+// TOKEN STORE
 // ============================================================================
 class TokenStore {
   constructor() { this._token = null; this._claims = null; }
@@ -27,63 +25,48 @@ class TokenStore {
   }
   get() { return this._token; }
   claims() { return this._claims; }
-  hasScope(s) {
-    const scopes = (this._claims?.scope || '').split(' ').filter(Boolean);
-    return scopes.includes(s);
-  }
+  scopes() { return (this._claims?.scope || '').split(' ').filter(Boolean); }
+  hasScope(s) { return this.scopes().includes(s); }
   clear() { this._token = null; this._claims = null; }
   isAuth() { return !!this._token; }
 }
 const tokenStore = new TokenStore();
 
 // ============================================================================
-// API CLIENT (single source of network calls)
+// API CLIENT
 // ============================================================================
 class ApiClient {
   constructor(tokenStore) {
     this.baseUrl = CONFIG.API_BASE_URL.replace(/\/$/, '');
     this.tokenStore = tokenStore;
     this.etagCache = new Map();
-    this.bodyCache = new Map();   // ← TAMBAH INI
+    this.bodyCache = new Map();
   }
-  _url(path) {
-    return `${this.baseUrl}${path.startsWith('/') ? path : '/' + path}`;
-  }
+  _url(path) { return `${this.baseUrl}${path.startsWith('/') ? path : '/' + path}`; }
+
   async request(method, path, { body = null, headers = {} } = {}) {
     const url = this._url(path);
-    const h = {
-      'Accept': 'application/json, application/problem+json',
-      ...headers,
-    };
+    const h = { 'Accept': 'application/json, application/problem+json', ...headers };
     if (body !== null) h['Content-Type'] = 'application/json';
     const token = this.tokenStore.get();
     if (token) h['Authorization'] = `Bearer ${token}`;
-
-    // Add If-None-Match for GET if we have an ETag
-    if (method === 'GET' && this.etagCache.has(url)) {
-      h['If-None-Match'] = this.etagCache.get(url);
-    }
+    if (method === 'GET' && this.etagCache.has(url)) h['If-None-Match'] = this.etagCache.get(url);
 
     let res;
     try {
       res = await fetch(url, { method, headers: h, body: body ? JSON.stringify(body) : null });
     } catch (err) {
-      throw { status: 0, title: 'Network Error', detail: `Cannot reach ${url}. Backend running? CORS enabled?`, type: '/problems/network-error' };
+      throw { status: 0, title: 'Network Error', detail: `Cannot reach ${url}`, type: '/problems/network-error' };
     }
 
-    // 304 Not Modified → return marker; screen keeps its last data
-    // 304 Not Modified → return cached body (jika ada) supaya screen tidak kosong
     if (res.status === 304) {
       const cached = this.bodyCache.get(url);
       const etag = this.etagCache.get(url);
       if (cached !== undefined) {
         const result = Array.isArray(cached) ? [...cached] : { ...cached };
-        if (typeof result === 'object') {
-          result._meta = { status: 304, is304: true, etag };
-        }
+        if (typeof result === 'object') result._meta = { status: 304, is304: true, etag };
         return result;
       }
-      // Kalau tidak ada cache body, fallback ke marker kosong
       return { _meta: { status: 304, is304: true, etag } };
     }
 
@@ -99,10 +82,8 @@ class ApiClient {
 
       if (res.status === 401) {
         tokenStore.clear();
-        showAlert('Session Expired (401)', problem.detail || 'Token invalid. Please login again.');
+        showAlert('Session expired', problem.detail || 'Please sign in again.');
         switchToLogin();
-      } else if (res.status === 403) {
-        showAlert('Forbidden (403)', problem.detail || 'Scope kurang.');
       }
       throw problem;
     }
@@ -110,14 +91,9 @@ class ApiClient {
     const etag = res.headers.get('etag') || res.headers.get('ETag');
     if (method === 'GET' && etag) {
       this.etagCache.set(url, etag);
-      // Simpan body juga untuk dipakai saat server balas 304
-      if (data !== null) {
-        this.bodyCache.set(url, data);
-      }
+      if (data !== null) this.bodyCache.set(url, data);
     }
-    if (data && typeof data === 'object') {
-      data._meta = { status: res.status, etag: etag || null };
-    }
+    if (data && typeof data === 'object') data._meta = { status: res.status, etag: etag || null };
     return data;
   }
   get(path, opts) { return this.request('GET', path, opts); }
@@ -130,12 +106,18 @@ const apiClient = new ApiClient(tokenStore);
 // ============================================================================
 const $ = (sel) => document.querySelector(sel);
 
-function showAlert(title, detail, meta = '') {
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function showAlert(title, detail) {
   $('#alert-title').textContent = title;
-  $('#alert-detail').textContent = detail;
-  $('#alert-meta').textContent = meta;
+  $('#alert-detail').textContent = detail || '';
   $('#alert-banner').classList.remove('hidden');
 }
+
 function hideAlert() { $('#alert-banner').classList.add('hidden'); }
 
 function switchToLogin() {
@@ -144,39 +126,56 @@ function switchToLogin() {
   $('#user-info').classList.add('hidden');
   window.location.hash = '';
 }
+
 function switchToApp() {
   $('#view-login').classList.add('hidden');
   $('#view-app').classList.remove('hidden');
   $('#user-info').classList.remove('hidden');
   const c = tokenStore.claims() || {};
-  $('#user-name').textContent = c.sub || '-';
-  $('#user-role').textContent = c.sub || '-';
-  $('#session-sub').textContent = c.sub || '-';
-  $('#session-scopes').textContent = (c.scope || '').split(' ').join(', ');
+  $('#user-name').textContent = c.sub || '—';
+  $('#user-role').textContent = (c.sub || '').includes('admin') ? 'Admin'
+    : (c.sub || '').includes('crew') ? 'Crew' : 'Organizer';
+  $('#session-sub').textContent = c.sub || '—';
+  $('#session-scopes').textContent = tokenStore.scopes().join(' ') || '—';
 }
 
-function renderLoading() {
-  return `<div class="card"><div class="skeleton-line" style="width:50%"></div><div class="skeleton-line" style="width:80%"></div><div class="skeleton-line" style="width:60%"></div></div>`;
+function statusBadge(status) {
+  const cls = ['active', 'draft', 'completed'].includes(status) ? `badge-${status}` : 'badge-default';
+  return `<span class="badge ${cls}">${escapeHtml(status || 'draft')}</span>`;
 }
-function renderError(err, retryFn) {
-  const title = err.title || 'Request Failed';
+
+function renderLoading(rows = 3) {
+  let html = '<div class="card"><div class="skeleton" style="width:40%"></div>';
+  for (let i = 0; i < rows; i++) html += '<div class="skeleton skeleton-row"></div>';
+  html += '</div>';
+  return html;
+}
+
+function renderEmpty(title, desc) {
+  return `<div class="card"><div class="state">
+    <div class="state-title">${escapeHtml(title)}</div>
+    <div class="state-desc">${escapeHtml(desc || '')}</div>
+  </div></div>`;
+}
+
+function renderError(err, retryPath) {
+  const title = err.title || 'Request failed';
   const detail = err.detail || err.message || 'Unknown error';
-  const status = err.status ? `HTTP ${err.status}` : '';
-  return `
-    <div class="card">
-      <div class="error-banner">
-        <span class="error-icon">❌</span>
-        <div class="error-content">
-          <strong class="error-title">${title}</strong>
-          <p class="error-detail">${detail}</p>
-          <p class="text-muted small">${status} ${err.type || ''}</p>
-        </div>
-        <button class="btn btn-sm btn-primary" onclick="${retryFn}">Retry</button>
-      </div>
-    </div>`;
+  return `<div class="card"><div class="state">
+    <div class="state-title">${escapeHtml(title)}</div>
+    <div class="state-desc">${escapeHtml(detail)}</div>
+    <button class="btn btn-secondary btn-sm" onclick="navigate('${retryPath}')">Retry</button>
+  </div></div>`;
 }
-function renderEmpty(msg) {
-  return `<div class="card"><div class="empty-state-box"><span class="empty-icon">📂</span><h3>${msg}</h3></div></div>`;
+
+function pageHeader(title, subtitle, actionHtml = '') {
+  return `<div class="page-actions">
+    <div>
+      <div class="page-title">${escapeHtml(title)}</div>
+      ${subtitle ? `<div class="page-subtitle">${escapeHtml(subtitle)}</div>` : ''}
+    </div>
+    ${actionHtml}
+  </div>`;
 }
 
 // ============================================================================
@@ -184,270 +183,386 @@ function renderEmpty(msg) {
 // ============================================================================
 const screens = {};
 
-screens['/health'] = {
-  title: 'W1 — Health Check',
-  render: async () => {
-    const el = $('#screen-container');
-    el.innerHTML = `<h2>W1 — Health Check</h2><p class="text-muted">Public endpoint, no auth.</p>${renderLoading()}`;
-    try {
-      const data = await apiClient.get('/health');
-      el.innerHTML = `
-        <h2>W1 — Health Check</h2>
-        <p class="text-muted">Public endpoint, no auth.</p>
-        <div class="card">
-          <h3>✅ Service is healthy</h3>
-          <pre class="code-output">${JSON.stringify(data, null, 2)}</pre>
-        </div>`;
-    } catch (err) {
-      el.innerHTML = `<h2>W1 — Health Check</h2>${renderError(err, "navigate('/health')")}`;
+// ---- Events list ----
+screens['/events'] = async () => {
+  const el = $('#screen-container');
+  el.innerHTML = pageHeader('Events', 'All events you have access to') + renderLoading();
+  try {
+    const data = await apiClient.get('/v1/events');
+    const events = Array.isArray(data) ? data : [];
+    if (events.length === 0) {
+      el.innerHTML = pageHeader('Events', 'All events you have access to')
+        + renderEmpty('No events yet', 'Events you have access to will appear here.');
+      return;
     }
+    const rows = events.map(e => `
+      <tr>
+        <td><code>${escapeHtml(e.id)}</code></td>
+        <td>${escapeHtml(e.name)}</td>
+        <td>${statusBadge(e.status)}</td>
+        <td>${(e.targetWeight || 0).toLocaleString()} g</td>
+        <td style="text-align:right">
+          <button class="btn btn-secondary btn-sm" onclick="navigate('/events/${escapeHtml(e.id)}')">Open</button>
+        </td>
+      </tr>`).join('');
+    el.innerHTML = pageHeader('Events', `${events.length} event${events.length === 1 ? '' : 's'} available`)
+      + `<div class="card">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Target</th><th></th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+  } catch (err) {
+    el.innerHTML = pageHeader('Events') + renderError(err, '/events');
   }
 };
 
-screens['/events'] = {
-  title: 'W2 — Events Directory',
-  render: async () => {
-    const el = $('#screen-container');
-    el.innerHTML = `<h2>W2 — Events Directory</h2><p class="text-muted">GET /v1/events</p>${renderLoading()}`;
-    try {
-      const data = await apiClient.get('/v1/events');
-      const events = Array.isArray(data) ? data : [];
-      if (events.length === 0) {
-        el.innerHTML = `<h2>W2 — Events Directory</h2>${renderEmpty('No events yet.')}`;
-        return;
-      }
-      const rows = events.map(e => `
-        <tr>
-          <td><code>${e.id}</code></td>
-          <td>${e.name || '-'}</td>
-          <td><span class="badge badge-info">${e.status || '-'}</span></td>
-          <td>${(e.targetWeight || 0).toLocaleString()} g</td>
-          <td><button class="btn btn-sm btn-outline-primary" onclick="navigate('/events/${e.id}')">Detail</button></td>
-        </tr>`).join('');
-      el.innerHTML = `
-        <h2>W2 — Events Directory</h2>
-        <p class="text-muted">GET /v1/events</p>
-        <div class="card">
-          <table class="data-table">
-            <thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Target</th><th></th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
-    } catch (err) {
-      el.innerHTML = `<h2>W2 — Events Directory</h2>${renderError(err, "navigate('/events')")}`;
-    }
-  }
-};
+// ---- Event detail ----
+screens['/events/:id'] = async (id) => {
+  const el = $('#screen-container');
+  el.innerHTML = `<a class="back-link" href="#/events" data-route="/events">&larr; Events</a>`
+    + renderLoading();
+  try {
+    const e = await apiClient.get(`/v1/events/${id}`);
+    const canConfirm = tokenStore.hasScope('confirmations:write');
+    const canCollect = tokenStore.hasScope('collections:write');
 
-screens['/events/:id'] = {
-  render: async (id) => {
-    const el = $('#screen-container');
-    el.innerHTML = `<h2>W3 — Event Detail</h2><p class="text-muted">GET /v1/events/${id}</p>${renderLoading()}`;
-    try {
-      const e = await apiClient.get(`/v1/events/${id}`);
-      const canConfirm = tokenStore.hasScope('confirmations:write');
-      el.innerHTML = `
-        <h2>W3 — Event Detail</h2>
-        <p class="text-muted">GET /v1/events/${id}</p>
-        <div class="card">
-          <div class="flex-between mb-2">
-            <h3>${e.name || 'Unnamed'}</h3>
-            <span class="badge badge-info">${e.status}</span>
-          </div>
-          <p class="text-muted">ID: <code>${e.id}</code> · Organizer: <code>${e.organizerId || e.organizer_id}</code></p>
-          <div class="form-grid-3 mt-3">
-            <div><span class="text-muted small">Target Weight</span><br><strong>${(e.targetWeight || 0).toLocaleString()} g</strong></div>
-            <div><span class="text-muted small">Points Multiplier</span><br><strong>${e.pointsMultiplier || 1}x</strong></div>
-            <div><span class="text-muted small">Bonus Multiplier</span><br><strong>${e.bonusMultiplier || 1}x</strong></div>
-          </div>
-          <div class="mt-4 flex-between">
-            <button class="btn btn-secondary btn-sm" onclick="navigate('/events')">← Back</button>
-            ${canConfirm ? `<button class="btn btn-primary btn-sm" onclick="navigate('/events/${e.id}/confirmation')">Confirm →</button>` : ''}
-          </div>
-        </div>`;
-    } catch (err) {
-      el.innerHTML = `<h2>W3 — Event Detail</h2>${renderError(err, `navigate('/events/${id}')`)}`;
+    let actionHtml = '';
+    if (canConfirm) {
+      actionHtml = `<button class="btn btn-primary" onclick="navigate('/events/${escapeHtml(e.id)}/confirmation')">Confirm event</button>`;
+    } else if (canCollect) {
+      actionHtml = `<button class="btn btn-primary" onclick="navigate('/collections?eventId=${escapeHtml(e.id)}')">Submit collection</button>`;
     }
-  }
-};
 
-screens['/events/:id/confirmation'] = {
-  render: async (id) => {
-    const el = $('#screen-container');
-    const etag = apiClient.etagCache.get(apiClient._url(`/v1/events/${id}`));
     el.innerHTML = `
-      <h2>W4 — Daily Confirmation</h2>
-      <p class="text-muted">POST /v1/events/${id}/daily-confirmation</p>
+      <a class="back-link" href="#/events" data-route="/events">&larr; Events</a>
+      <div class="page-actions">
+        <div>
+          <div class="page-title">${escapeHtml(e.name)}</div>
+          <div class="page-subtitle"><code>${escapeHtml(e.id)}</code> &middot; ${escapeHtml(e.organizerId || e.organizer_id || '')}</div>
+        </div>
+        <div>${actionHtml}</div>
+      </div>
+
       <div class="card">
-        <form id="w4-form">
-          <div class="form-group">
-            <label class="form-label">Admin ID (from token)</label>
-            <input class="form-control" id="w4-admin" value="${tokenStore.claims()?.sub || ''}" readonly>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Status</span>
+            <div class="info-value">${statusBadge(e.status)}</div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Verified Breakdown</label>
-            <div id="w4-rows"></div>
-            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addW4Row()">+ Add Row</button>
+          <div class="info-item">
+            <span class="info-label">Target weight</span>
+            <div class="info-value">${(e.targetWeight || 0).toLocaleString()} g</div>
           </div>
-          <div id="w4-error" class="form-feedback-error hidden"></div>
-          <div class="flex-between mt-4">
-            <span class="text-muted small">If-Match: <code>${etag || '(none)'}</code></span>
-            <button type="submit" class="btn btn-primary" id="w4-submit">Submit Confirmation</button>
+          <div class="info-item">
+            <span class="info-label">Points multiplier</span>
+            <div class="info-value">${e.pointsMultiplier ?? 1}x</div>
           </div>
-        </form>
+          <div class="info-item">
+            <span class="info-label">Bonus multiplier</span>
+            <div class="info-value">${e.bonusMultiplier ?? 1}x</div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Scheduled</span>
+            <div class="info-value">${e.scheduledDate ? new Date(e.scheduledDate).toLocaleDateString() : '—'}</div>
+          </div>
+        </div>
       </div>`;
-    addW4Row();
-    $('#w4-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = $('#w4-submit');
-      btn.disabled = true;
-      $('#w4-error').classList.add('hidden');
-      const rows = document.querySelectorAll('#w4-rows .w4-row');
-      const verifiedBreakdown = [];
-      rows.forEach(r => {
-        const type = r.querySelector('.w4-type').value;
-        const w = parseInt(r.querySelector('.w4-weight').value, 10);
-        if (w > 0) verifiedBreakdown.push({ wasteType: type, weight: w });
-      });
-      if (verifiedBreakdown.length === 0) {
-        $('#w4-error').textContent = 'At least 1 row with weight > 0 required';
-        $('#w4-error').classList.remove('hidden');
-        btn.disabled = false;
-        return;
-      }
-      const payload = { adminId: $('#w4-admin').value, verifiedBreakdown };
-      const key = crypto.randomUUID();
-      const headers = { 'Idempotency-Key': key };
-      if (etag) headers['If-Match'] = etag;
-      try {
-        const result = await apiClient.post(`/v1/events/${id}/daily-confirmation`, payload, headers);
-        el.innerHTML = `
-          <h2>W4 — Daily Confirmation</h2>
-          <div class="card">
-            <div class="success-banner">
-              <h3>✅ Confirmed</h3>
-              <p>Grade: <strong>${result.grade}</strong> · Points: <strong>${result.totalPoints}</strong></p>
-              <p class="text-muted small">Recorded: ${result.recordedTotal}g · Verified: ${result.verifiedTotal}g · Hazmat: ${result.hazmatDeducted || 0}g</p>
-              <p class="text-muted small">Target met: ${result.targetMet ? 'Yes' : 'No'}</p>
-              <div class="mt-3">
-                <button class="btn btn-secondary btn-sm" onclick="navigate('/events/${id}')">← Back to Event</button>
-              </div>
-            </div>
-          </div>`;
-      } catch (err) {
-        if (err.status === 412) {
-          $('#w4-error').innerHTML = `⚠️ <strong>Concurrency conflict (412).</strong> Someone updated this event first. ${err.detail || ''}`;
-        } else {
-          $('#w4-error').textContent = `${err.title || 'Error'}: ${err.detail || ''}`;
-        }
-        $('#w4-error').classList.remove('hidden');
-        btn.disabled = false;
-      }
-    });
+  } catch (err) {
+    el.innerHTML = `<a class="back-link" href="#/events" data-route="/events">&larr; Events</a>`
+      + renderError(err, `/events/${id}`);
   }
 };
 
-function addW4Row() {
+// ---- Confirmation form ----
+screens['/events/:id/confirmation'] = async (id) => {
+  const el = $('#screen-container');
+  const etag = apiClient.etagCache.get(apiClient._url(`/v1/events/${id}`));
+  const claims = tokenStore.claims() || {};
+
+  el.innerHTML = `
+    <a class="back-link" href="#/events/${escapeHtml(id)}" data-route="/events/${escapeHtml(id)}">&larr; Event detail</a>
+    <div class="page-header">
+      <div class="page-title">Confirm event</div>
+      <div class="page-subtitle">Enter the verified weight breakdown from the depot scales.</div>
+    </div>
+
+    <div class="card">
+      <form id="form">
+        <div class="form-group">
+          <label class="form-label">Admin subject</label>
+          <input class="form-input" value="${escapeHtml(claims.sub || '')}" readonly>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Verified breakdown</label>
+          <div id="rows" class="rows"></div>
+          <button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="addBreakdownRow()">Add row</button>
+          <div id="rows-total" class="row-total">
+            <span>Total verified weight</span>
+            <strong id="total-weight">0 g</strong>
+          </div>
+        </div>
+
+        <div id="form-error" class="form-error hidden"></div>
+        <div id="conflict" class="banner banner-warning hidden"></div>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="navigate('/events/${escapeHtml(id)}')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="submit-btn">Confirm</button>
+        </div>
+      </form>
+    </div>`;
+
+  addBreakdownRow();
+
+  $('#form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('#submit-btn');
+    btn.disabled = true;
+    $('#form-error').classList.add('hidden');
+    $('#conflict').classList.add('hidden');
+
+    const rows = [...document.querySelectorAll('#rows .row')];
+    const verifiedBreakdown = [];
+    for (const r of rows) {
+      const type = r.querySelector('.row-type').value;
+      const w = parseInt(r.querySelector('.row-weight').value, 10);
+      if (w > 0) verifiedBreakdown.push({ wasteType: type, weight: w });
+    }
+
+    if (verifiedBreakdown.length === 0) {
+      $('#form-error').textContent = 'Add at least one row with a weight greater than 0.';
+      $('#form-error').classList.remove('hidden');
+      btn.disabled = false;
+      return;
+    }
+
+    const payload = { adminId: claims.sub, verifiedBreakdown };
+    const headers = { 'Idempotency-Key': crypto.randomUUID() };
+    if (etag) headers['If-Match'] = etag;
+
+    try {
+      const result = await apiClient.post(`/v1/events/${id}/daily-confirmation`, payload, headers);
+      el.innerHTML = `
+        <a class="back-link" href="#/events/${escapeHtml(id)}" data-route="/events/${escapeHtml(id)}">&larr; Event detail</a>
+        <div class="page-header">
+          <div class="page-title">Confirmation successful</div>
+          <div class="page-subtitle">The event has been confirmed and points awarded.</div>
+        </div>
+        <div class="card">
+          <div class="info-grid">
+            <div class="info-item"><span class="info-label">Grade</span><div class="info-value">${escapeHtml(result.grade)}</div></div>
+            <div class="info-item"><span class="info-label">Total points</span><div class="info-value">${(result.totalPoints || 0).toLocaleString()}</div></div>
+            <div class="info-item"><span class="info-label">Recorded total</span><div class="info-value">${(result.recordedTotal || 0).toLocaleString()} g</div></div>
+            <div class="info-item"><span class="info-label">Verified total</span><div class="info-value">${(result.verifiedTotal || 0).toLocaleString()} g</div></div>
+            <div class="info-item"><span class="info-label">Target met</span><div class="info-value">${result.targetMet ? 'Yes' : 'No'}</div></div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-secondary" onclick="navigate('/events/${escapeHtml(id)}')">Back to event</button>
+          </div>
+        </div>`;
+    } catch (err) {
+      if (err.status === 412) {
+        const c = $('#conflict');
+        c.innerHTML = `<div class="banner-title">Concurrency conflict</div>
+          <div class="banner-desc">Someone else updated this event first. Refresh and try again.</div>`;
+        c.classList.remove('hidden');
+      } else {
+        $('#form-error').textContent = err.detail || err.title || 'Request failed.';
+        $('#form-error').classList.remove('hidden');
+      }
+      btn.disabled = false;
+    }
+  });
+};
+
+function addBreakdownRow() {
+  const container = $('#rows');
   const div = document.createElement('div');
-  div.className = 'dynamic-row-item w4-row';
+  div.className = 'row';
   div.innerHTML = `
-    <select class="form-control w4-type" style="flex:1">
-      <option value="ORGANIK">ORGANIK</option>
-      <option value="ANORGANIK">ANORGANIK</option>
-      <option value="RESIDU">RESIDU</option>
-      <option value="HAZMAT">HAZMAT</option>
+    <select class="form-select row-type">
+      <option value="ORGANIK">Organik</option>
+      <option value="ANORGANIK">Anorganik</option>
+      <option value="RESIDU">Residu</option>
+      <option value="HAZMAT">Hazmat</option>
     </select>
-    <input type="number" class="form-control w4-weight" style="flex:1" placeholder="Weight (g)" min="0">
-    <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">×</button>`;
-  $('#w4-rows').appendChild(div);
+    <input type="number" class="form-input row-weight" placeholder="Weight (g)" min="0" value="0">
+    <button type="button" class="row-remove" onclick="this.parentElement.remove(); updateBreakdownTotal();" aria-label="Remove">&times;</button>`;
+  div.querySelector('.row-weight').addEventListener('input', updateBreakdownTotal);
+  container.appendChild(div);
+  updateBreakdownTotal();
 }
 
-screens['/collections'] = {
-  render: async () => {
-    const el = $('#screen-container');
-    el.innerHTML = `
-      <h2>W5 — Daily Collections</h2>
-      <p class="text-muted">POST /v1/daily-collections</p>
-      <div class="card">
-        <form id="w5-form">
-          <div class="form-grid-3">
-            <div class="form-group"><label class="form-label">Event ID</label><input class="form-control" id="w5-event" value="evt_001" required></div>
-            <div class="form-group"><label class="form-label">Roster ID</label><input class="form-control" id="w5-roster" value="rost_budi" required></div>
-            <div class="form-group"><label class="form-label">Shift Date</label><input type="date" class="form-control" id="w5-date" required></div>
+function updateBreakdownTotal() {
+  const rows = [...document.querySelectorAll('#rows .row')];
+  let total = 0;
+  for (const r of rows) {
+    const v = parseInt(r.querySelector('.row-weight').value, 10);
+    if (!isNaN(v) && v > 0) total += v;
+  }
+  const el = $('#total-weight');
+  if (el) el.textContent = `${total.toLocaleString()} g`;
+}
+
+// ---- Collections form ----
+screens['/collections'] = async () => {
+  const el = $('#screen-container');
+  const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
+  const presetEvent = params.get('eventId') || 'evt_001';
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="page-title">Submit collection</div>
+      <div class="page-subtitle">Record the waste collected during a shift.</div>
+    </div>
+    <div class="card">
+      <form id="form">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Event ID</label>
+            <input class="form-input" id="eventId" value="${escapeHtml(presetEvent)}" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Records</label>
-            <div id="w5-rows"></div>
-            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addW5Row()">+ Add Record</button>
+            <label class="form-label">Roster ID</label>
+            <input class="form-input" id="rosterId" value="rost_budi" required>
           </div>
-          <div id="w5-error" class="form-feedback-error hidden"></div>
-          <div class="flex-between mt-4">
-            <span></span>
-            <button type="submit" class="btn btn-primary" id="w5-submit">Submit Batch</button>
+          <div class="form-group">
+            <label class="form-label">Shift date</label>
+            <input type="date" class="form-input" id="shiftDate" required>
           </div>
-        </form>
-      </div>`;
-    $('#w5-date').value = new Date().toISOString().split('T')[0];
-    addW5Row();
-    $('#w5-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = $('#w5-submit');
-      btn.disabled = true;
-      $('#w5-error').classList.add('hidden');
-      const rows = document.querySelectorAll('#w5-rows .w5-row');
-      const records = [];
-      rows.forEach(r => {
-        const siteId = r.querySelector('.w5-site').value;
-        const wasteType = r.querySelector('.w5-type').value;
-        const weight = parseInt(r.querySelector('.w5-weight').value, 10);
-        if (siteId && weight >= 0) records.push({ siteId, wasteType, weight });
-      });
-      if (records.length === 0) {
-        $('#w5-error').textContent = 'At least 1 record required';
-        $('#w5-error').classList.remove('hidden');
-        btn.disabled = false;
-        return;
-      }
-      const payload = {
-        eventId: $('#w5-event').value,
-        rosterId: $('#w5-roster').value,
-        shiftDate: $('#w5-date').value,
-        records,
-      };
-      try {
-        const result = await apiClient.post('/v1/daily-collections', payload, { 'Idempotency-Key': crypto.randomUUID() });
-        el.innerHTML = `
-          <h2>W5 — Daily Collections</h2>
-          <div class="card">
-            <div class="success-banner">
-              <h3>✅ Batch Accepted (202)</h3>
-              <p>Records accepted: <strong>${result.acceptedCount}</strong> · Status: <strong>${result.status}</strong></p>
-              <div class="mt-3">
-                <button class="btn btn-secondary btn-sm" onclick="navigate('/collections')">Submit Another</button>
-              </div>
-            </div>
-          </div>`;
-      } catch (err) {
-        $('#w5-error').textContent = `${err.title || 'Error'}: ${err.detail || ''}`;
-        $('#w5-error').classList.remove('hidden');
-        btn.disabled = false;
-      }
-    });
-  }
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Collection records</label>
+          <div id="records" class="rows"></div>
+          <button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="addCollectionRow()">Add record</button>
+          <div class="row-total">
+            <span>Total collected weight</span>
+            <strong id="total-weight">0 g</strong>
+          </div>
+        </div>
+
+        <div id="form-error" class="form-error hidden"></div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="submit-btn">Submit batch</button>
+        </div>
+      </form>
+    </div>`;
+
+  $('#shiftDate').value = new Date().toISOString().split('T')[0];
+  addCollectionRow();
+
+  $('#form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('#submit-btn');
+    btn.disabled = true;
+    $('#form-error').classList.add('hidden');
+
+    const rows = [...document.querySelectorAll('#records .row')];
+    const records = [];
+    for (const r of rows) {
+      const siteId = r.querySelector('.row-site').value.trim();
+      const wasteType = r.querySelector('.row-type').value;
+      const weight = parseInt(r.querySelector('.row-weight').value, 10);
+      if (siteId && weight >= 0) records.push({ siteId, wasteType, weight });
+    }
+
+    if (records.length === 0) {
+      $('#form-error').textContent = 'Add at least one record.';
+      $('#form-error').classList.remove('hidden');
+      btn.disabled = false;
+      return;
+    }
+
+    const payload = {
+      eventId: $('#eventId').value.trim(),
+      rosterId: $('#rosterId').value.trim(),
+      shiftDate: $('#shiftDate').value,
+      records,
+    };
+
+    try {
+      const result = await apiClient.post('/v1/daily-collections', payload, { 'Idempotency-Key': crypto.randomUUID() });
+      el.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">Collection submitted</div>
+          <div class="page-subtitle">The batch has been accepted and is queued for verification.</div>
+        </div>
+        <div class="card">
+          <div class="info-grid">
+            <div class="info-item"><span class="info-label">Accepted records</span><div class="info-value">${result.acceptedCount}</div></div>
+            <div class="info-item"><span class="info-label">Status</span><div class="info-value">${escapeHtml(result.status)}</div></div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-secondary" onclick="navigate('/collections')">Submit another</button>
+          </div>
+        </div>`;
+    } catch (err) {
+      $('#form-error').textContent = err.detail || err.title || 'Request failed.';
+      $('#form-error').classList.remove('hidden');
+      btn.disabled = false;
+    }
+  });
 };
 
-function addW5Row() {
+function addCollectionRow() {
+  const container = $('#records');
   const div = document.createElement('div');
-  div.className = 'dynamic-row-item w5-row';
+  div.className = 'row';
   div.innerHTML = `
-    <input class="form-control w5-site" style="flex:1" placeholder="site_a" value="site_a">
-    <select class="form-control w5-type" style="flex:1">
-      <option>ORGANIK</option><option>ANORGANIK</option><option>RESIDU</option><option>HAZMAT</option>
+    <input class="form-input row-site" placeholder="Site ID (e.g. site_a)" value="site_a">
+    <select class="form-select row-type">
+      <option value="ORGANIK">Organik</option>
+      <option value="ANORGANIK">Anorganik</option>
+      <option value="RESIDU">Residu</option>
+      <option value="HAZMAT">Hazmat</option>
     </select>
-    <input type="number" class="form-control w5-weight" style="flex:1" placeholder="Weight (g)" min="0" value="1000">
-    <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">×</button>`;
-  $('#w5-rows').appendChild(div);
+    <input type="number" class="form-input row-weight" placeholder="Weight (g)" min="0" value="1000">
+    <button type="button" class="row-remove" onclick="this.parentElement.remove(); updateCollectionTotal();" aria-label="Remove">&times;</button>`;
+  div.querySelector('.row-weight').addEventListener('input', updateCollectionTotal);
+  container.appendChild(div);
+  updateCollectionTotal();
 }
+
+function updateCollectionTotal() {
+  const rows = [...document.querySelectorAll('#records .row')];
+  let total = 0;
+  for (const r of rows) {
+    const v = parseInt(r.querySelector('.row-weight').value, 10);
+    if (!isNaN(v) && v > 0) total += v;
+  }
+  const el = $('#total-weight');
+  if (el) el.textContent = `${total.toLocaleString()} g`;
+}
+
+// ---- Health ----
+screens['/health'] = async () => {
+  const el = $('#screen-container');
+  el.innerHTML = pageHeader('System health', 'Current status of the backend service') + renderLoading(1);
+  try {
+    const data = await apiClient.get('/health');
+    el.innerHTML = pageHeader('System health', 'Current status of the backend service')
+      + `<div class="card">
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Status</span>
+              <div class="info-value" style="color:var(--success)">${escapeHtml(data.status || 'ok')}</div>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Endpoint</span>
+              <div class="info-value mono">${escapeHtml(CONFIG.API_BASE_URL)}/health</div>
+            </div>
+          </div>
+        </div>`;
+  } catch (err) {
+    el.innerHTML = pageHeader('System health') + renderError(err, '/health');
+  }
+};
 
 // ============================================================================
 // ROUTER
@@ -456,86 +571,124 @@ function navigate(path) {
   window.location.hash = path;
 }
 
-function route() {
-  if (!tokenStore.isAuth()) {
-    switchToLogin();
-    return;
-  }
-  switchToApp();
-  const path = window.location.hash.slice(1) || '/events';
-
-  // Match patterns
-  let matched = null;
-  let params = null;
-  for (const key of Object.keys(screens)) {
-    const keyParts = key.split('/');
-    const pathParts = path.split('/');
-    if (keyParts.length !== pathParts.length) continue;
+function matchRoute(path) {
+  const parts = path.split('?')[0].split('/').filter(Boolean);
+  const candidates = [
+    { key: '/events/:id/confirmation', pattern: ['events', ':id', 'confirmation'] },
+    { key: '/events/:id', pattern: ['events', ':id'] },
+    { key: '/events', pattern: ['events'] },
+    { key: '/collections', pattern: ['collections'] },
+    { key: '/health', pattern: ['health'] },
+  ];
+  for (const c of candidates) {
+    if (c.pattern.length !== parts.length) continue;
+    const params = {};
     let ok = true;
-    const p = [];
-    for (let i = 0; i < keyParts.length; i++) {
-      if (keyParts[i].startsWith(':')) p.push(pathParts[i]);
-      else if (keyParts[i] !== pathParts[i]) { ok = false; break; }
+    for (let i = 0; i < c.pattern.length; i++) {
+      if (c.pattern[i].startsWith(':')) params[c.pattern[i].slice(1)] = parts[i];
+      else if (c.pattern[i] !== parts[i]) { ok = false; break; }
     }
-    if (ok) { matched = key; params = p; break; }
+    if (ok) return { key: c.key, params };
   }
-  if (!matched) { navigate('/events'); return; }
+  return null;
+}
 
-  // Highlight nav
+function route() {
+  if (!tokenStore.isAuth()) { switchToLogin(); return; }
+  switchToApp();
+
+  const hash = window.location.hash.slice(1) || '/events';
+  const matched = matchRoute(hash);
+  const path = hash.split('?')[0];
+
   document.querySelectorAll('.nav-item').forEach(a => {
     const r = a.getAttribute('data-route');
     a.classList.toggle('active', path === r || path.startsWith(r + '/'));
   });
 
-  screens[matched].render(...(params || []));
+  if (!matched) { navigate('/events'); return; }
+
+  if (matched.key === '/events/:id/confirmation') {
+    screens['/events/:id/confirmation'](matched.params.id);
+  } else if (matched.key === '/events/:id') {
+    screens['/events/:id'](matched.params.id);
+  } else {
+    screens[matched.key]();
+  }
 }
 
 window.addEventListener('hashchange', route);
 
 // ============================================================================
-// DEV LOGIN (JWKS /sign)
+// LOGIN (username + password → JWKS /login)
 // ============================================================================
-const LOGIN_PRESETS = {
-  eo:    { sub: 'organizer-a', scopes: ['events:read', 'events:write', 'sites:approve'] },
-  admin: { sub: 'organizer-a', scopes: ['events:read', 'confirmations:write'] },
-  crew:  { sub: 'crew-a',      scopes: ['events:read', 'collections:write'] },
-};
+function getJwksBaseUrl() {
+  return CONFIG.JWKS_SIGN_URL.replace(/\/sign\/?$/, '');
+}
 
-async function devLogin(role) {
-  const preset = LOGIN_PRESETS[role];
-  if (!preset) return;
-  hideAlert();
-  try {
-    const res = await fetch(CONFIG.JWKS_SIGN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sub: preset.sub, scopes: preset.scopes }),
-    });
-    if (!res.ok) throw new Error(`JWKS /sign returned ${res.status}`);
-    const { token } = await res.json();
-    tokenStore.set(token);
-    switchToApp();
-    navigate('/events');
-  } catch (err) {
-    showAlert('Login Failed', err.message || 'Cannot reach JWKS server. Is it running at ' + CONFIG.JWKS_SIGN_URL + '?');
+async function performLogin(username, password) {
+  const res = await fetch(`${getJwksBaseUrl()}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+
+  if (!res.ok) {
+    const detail = (data && (data.title || data.detail)) || 'Invalid credentials.';
+    throw new Error(detail);
   }
+
+  if (!data || !data.token) throw new Error('No token returned.');
+  return data.token;
 }
 
 // ============================================================================
 // INIT
 // ============================================================================
 document.addEventListener('DOMContentLoaded', () => {
-  $('#dev-backend').textContent = CONFIG.API_BASE_URL;
-  $('#dev-jwks').textContent = CONFIG.JWKS_SIGN_URL;
-  document.querySelectorAll('[data-login]').forEach(btn => {
-    btn.addEventListener('click', () => devLogin(btn.getAttribute('data-login')));
-  });
+  const envInfo = $('#env-info');
+  if (envInfo) envInfo.textContent = `API: ${CONFIG.API_BASE_URL}`;
+
+  const loginForm = $('#login-form');
+  if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('#login-submit');
+      const errEl = $('#login-error');
+      errEl.classList.add('hidden');
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+
+      const username = $('#login-username').value.trim();
+      const password = $('#login-password').value;
+
+      try {
+        const token = await performLogin(username, password);
+        tokenStore.set(token);
+        $('#login-password').value = '';
+        switchToApp();
+        navigate('/events');
+      } catch (err) {
+        errEl.textContent = err.message || 'Sign-in failed.';
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      }
+    });
+  }
+
   $('#alert-close').addEventListener('click', hideAlert);
+
   $('#btn-logout').addEventListener('click', () => {
     tokenStore.clear();
     apiClient.etagCache.clear();
-    apiClient.bodyCache.clear();   // ← TAMBAH INI
+    apiClient.bodyCache.clear();
     switchToLogin();
   });
+
   route();
 });

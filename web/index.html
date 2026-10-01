@@ -3,105 +3,108 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EventWise Web App</title>
+  <title>EventWise</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="app">
-    <div id="alert-banner" class="alert-container hidden">
-      <div class="alert-content">
-        <strong id="alert-title">Notice</strong>
-        <p id="alert-detail"></p>
-        <span id="alert-meta" class="text-muted small"></span>
-      </div>
-      <button id="alert-close" class="btn-close">×</button>
-    </div>
-
+    <!-- Top bar -->
     <header class="topbar">
-      <div class="brand">
-        <span class="brand-logo">🌿</span>
-        <span class="brand-title">EventWise</span>
-        <span class="brand-version">v1.0</span>
-      </div>
-      <div id="user-info" class="user-badge hidden">
-        <span id="user-name">-</span>
-        <span id="user-role" class="role-tag">-</span>
-        <button id="btn-logout" class="btn btn-sm btn-secondary">Logout</button>
+      <a href="#/" class="brand" data-route="/">EventWise</a>
+      <div class="topbar-right">
+        <div id="user-info" class="user-info hidden">
+          <span id="user-name" class="user-name">—</span>
+          <span id="user-role" class="user-role">—</span>
+          <button id="btn-logout" class="btn btn-ghost btn-sm">Sign out</button>
+        </div>
       </div>
     </header>
 
-    <main id="view-login" class="view-login-container">
-      <div class="login-hero">
-        <h2>EventWise Platform</h2>
-        <p>Dev login — pakai JWKS test server lokal. Tidak butuh Keycloak.</p>
+    <!-- Alert banner -->
+    <div id="alert-banner" class="alert hidden" role="alert">
+      <div class="alert-body">
+        <strong id="alert-title">Notice</strong>
+        <span id="alert-detail"></span>
       </div>
+      <button id="alert-close" class="alert-close" aria-label="Dismiss">&times;</button>
+    </div>
 
-      <div class="login-role-options">
-        <div class="role-card">
-          <div class="role-icon">🏢</div>
-          <div class="role-details">
-            <h3>Event Organizer</h3>
-            <p>Baca event, buat event, approve site.</p>
-            <div class="scopes-tags">
-              <span class="tag">events:read</span>
-              <span class="tag">events:write</span>
-              <span class="tag">sites:approve</span>
-            </div>
+    <!-- Login view (unauthenticated) -->
+    <!-- Login view (unauthenticated) -->
+    <main id="view-login" class="auth-view">
+      <div class="auth-card">
+        <h1>Sign in to EventWise</h1>
+        <p class="auth-subtitle">Enter your credentials to continue.</p>
+
+        <form id="login-form">
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input type="text" class="form-input" id="login-username" autocomplete="username" required>
           </div>
-          <button class="btn btn-primary" data-login="eo">Login sebagai EO</button>
-        </div>
-
-        <div class="role-card">
-          <div class="role-icon">⚖️</div>
-          <div class="role-details">
-            <h3>Depot Admin</h3>
-            <p>Baca event, konfirmasi akhir event.</p>
-            <div class="scopes-tags">
-              <span class="tag">events:read</span>
-              <span class="tag">confirmations:write</span>
-            </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-input" id="login-password" autocomplete="current-password" required>
           </div>
-          <button class="btn btn-primary" data-login="admin">Login sebagai Admin</button>
-        </div>
 
-        <div class="role-card">
-          <div class="role-icon">🚛</div>
-          <div class="role-details">
-            <h3>Field Crew</h3>
-            <p>Baca event, submit daily collection.</p>
-            <div class="scopes-tags">
-              <span class="tag">events:read</span>
-              <span class="tag">collections:write</span>
+          <div id="login-error" class="form-error hidden"></div>
+
+          <button type="submit" class="btn btn-primary" id="login-submit" style="width:100%;margin-top:8px">Sign in</button>
+        </form>
+
+        <div class="auth-footer">
+          <details>
+            <summary style="cursor:pointer;color:var(--text-muted)">Demo credentials</summary>
+            <div style="margin-top:8px;line-height:1.8">
+              <div><strong>organizer-a</strong> / organizer123</div>
+              <div><strong>admin-a</strong> / admin123</div>
+              <div><strong>crew-a</strong> / crew123</div>
             </div>
-          </div>
-          <button class="btn btn-primary" data-login="crew">Login sebagai Crew</button>
+          </details>
         </div>
-      </div>
-
-      <div class="card">
-        <p class="text-muted small">Backend: <code id="dev-backend"></code></p>
-        <p class="text-muted small">JWKS: <code id="dev-jwks"></code></p>
       </div>
     </main>
 
-    <div id="view-app" class="shell-layout hidden">
-      <aside class="shell-sidebar">
-        <span class="sidebar-section-label">Workflows</span>
-        <ul class="sidebar-nav">
-          <li><a href="#/health" class="nav-item" data-route="/health"><span class="nav-icon">🩺</span> W1: Health</a></li>
-          <li><a href="#/events" class="nav-item" data-route="/events"><span class="nav-icon">📋</span> W2: Events</a></li>
-          <li><a href="#/collections" class="nav-item" data-route="/collections"><span class="nav-icon">🗑️</span> W5: Collections</a></li>
-        </ul>
-        <span class="sidebar-section-label mt-4">Session</span>
-        <div class="card" style="padding: .75rem; font-size: .75rem;">
-          <div><strong>Sub:</strong> <span id="session-sub">-</span></div>
-          <div><strong>Scopes:</strong> <span id="session-scopes">-</span></div>
+    <!-- App shell (authenticated) -->
+    <div id="view-app" class="shell hidden">
+      <aside class="sidebar">
+        <nav class="nav">
+          <span class="nav-section">Workspace</span>
+          <a href="#/events" class="nav-item" data-route="/events">Events</a>
+          <a href="#/collections" class="nav-item" data-route="/collections">Submit Collection</a>
+          <a href="#/health" class="nav-item" data-route="/health">System Health</a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="nav-section">Session</span>
+          <div class="session-info">
+            <div class="session-row">
+              <span>Subject</span>
+              <span id="session-sub" class="session-value">—</span>
+            </div>
+            <div class="session-row">
+              <span>Scopes</span>
+              <span id="session-scopes" class="session-value">—</span>
+            </div>
+          </div>
         </div>
       </aside>
 
-      <main class="shell-content" id="screen-container"></main>
+      <main class="content" id="screen-container"></main>
     </div>
   </div>
+
+  <script>
+    // Production config injection
+    const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    window.ENV = {
+      VITE_API_BASE_URL: isLocal
+        ? 'http://localhost:3000'
+        : 'https://backend-production-fbc2.up.railway.app',
+      VITE_JWKS_SIGN_URL: isLocal
+        ? 'http://127.0.0.1:9999/sign'
+        : 'https://jwks-production-e785.up.railway.app/sign',
+    };
+  </script>
   <script src="app.js"></script>
 </body>
 </html>
