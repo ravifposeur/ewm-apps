@@ -23,30 +23,17 @@ const { createServer } = require('node:http');
 const ISSUER_FALLBACK = 'https://test.local/';
 const AUDIENCE_FALLBACK = 'eventwise-api';
 
-// kid unik per proses test.
-//
-// ioe caching: `createRemoteJWKSet` di service melakukan CACHE JWKS. Kalau kid-nya
-// selalu 'test-key', lalu JWKS di-refetch dengan kunci baru yang memakai kid
-// yang sama, jose akan mencocokkan token ke kunci LAMA yang sudah di-cache dan
-// TIDAK pernah mengunduh ulang — hasilnya ERR_JWS_SIGNATURE_VERIFICATION_FAILED
-// untuk token yang sebenarnya valid.
-//
-// kid acak per proses memaksa jose melihat kid yang belum dikenal, sehingga
-// ia mengunduh ulang JWKS. Ini yang membuat test bisa dijalankan berulang
-// terhadap service yang sama tanpa restart.
 const KID = `test-key-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
 
 let keyPairPromise = null;
 let jwkPromise = null;
 let josePromise = null;
 
-/** jose v6 ESM-only; dynamic import sekali lalu dipakai ulang. */
 function loadJose() {
   if (!josePromise) josePromise = import('jose');
   return josePromise;
 }
 
-/** Key pair + JWK dibuat sekali per proses, lalu dipakai ulang. */
 async function keyMaterial() {
   const jose = await loadJose();
 
@@ -64,17 +51,29 @@ async function keyMaterial() {
   return keyPairPromise;
 }
 
-// Server JWKS mini — satu instance per proses test.
-//
-// Menyajikan JWK di /jwks.json untuk diverifikasi service, DAN menandatangani
-// token on-demand di /sign. Endpoint /sign ada karena fixture ini mungkin
-// dijalankan sebagai proses terpisah dari test (lihat tests/helpers/jwks-server.js):
-// bila service dan test memakai DUA proses berbeda, masing-masing akan
-// membangkitkan keypair sendiri dan jwtVerify selalu gagal
-// (ERR_JWKS_NO_MATCHING_KEY). Dengan satu proses JWKS yang melayani keduanya,
-// hanya ada SATU keypair sehingga token selalu cocok dengan JWK yang diunduh
-// service.
+/**
+ * Helper: set CORS headers on every response.
+ * Diperlukan agar browser dev app (http://localhost:5173) dapat
+ * memanggil endpoint /sign dan /jwks.json dari origin berbeda.
+ */
+function setCorsHeaders(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '600');
+}
+
 const jwksServer = createServer((req, res) => {
+  // CORS headers HARUS di-set sebelum handling apapun, termasuk 404/error.
+  setCorsHeaders(res);
+
+  // Preflight OPTIONS — balas cepat tanpa proses lebih lanjut.
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
   if (req.url && req.url.startsWith('/sign')) {
     handleSign(req, res);
     return;
@@ -127,14 +126,7 @@ function handleSign(req, res) {
   });
 }
 
-/**
- * Minta token ke server JWKS eksternal (proses terpisah).
- * Dipakai test saat JWKS sudah melayani di luar proses ini — supaya kunci
- * yang menandatangani token sama dengan yang disajikan ke service.
- */
 async function tokenFromJwksServer(baseUrl, subject, scopes, options = {}) {
-  // baseUrl datang sebagai OIDC_JWKS_URI, yaitu .../jwks.json — bukan root.
-  // Endpoint /sign hidup di root server, jadi buang nama file JWKS dulu.
   const root = baseUrl.replace(/\/[^/]*$/, '');
   const res = await fetch(`${root}/sign`, {
     method: 'POST',
@@ -154,7 +146,6 @@ async function tokenFromJwksServer(baseUrl, subject, scopes, options = {}) {
   return body.token;
 }
 
-/** Nyalakan server JWKS di port tertentu (0 = ephemeral, aman untuk CI paralel). */
 function startJwksServer(port = 0) {
   return new Promise((resolve, reject) => {
     jwksServer.once('error', reject);
@@ -165,7 +156,6 @@ function startJwksServer(port = 0) {
   });
 }
 
-/** Matikan server JWKS (dipanggil di afterAll). */
 function stopJwksServer() {
   return new Promise((resolve) => {
     if (!jwksServer.listening) return resolve();
@@ -173,18 +163,6 @@ function stopJwksServer() {
   });
 }
 
-/**
- * Buat JWT pengujian yang valid sesuai spesifikasi claim:
- * iss=OIDC_ISSUER, aud=OIDC_AUDIENCE, sub=subject,
- * scope=scopes.join(' '), exp=+5 menit, alg RS256/kid test-key.
- *
- * @param {string} subject - mis. 'organizer-a', 'crew-a', 'admin-a'
- * @param {string[]} scopes - mis. ['events:read', 'collections:write']
- * @param {object} [options]
- * @param {string} [options.issuer]
- * @param {string} [options.audience]
- * @param {string} [options.expiresIn] - mis. '-1m' untuk token kedaluwarsa
- */
 async function tokenFor(subject, scopes, options = {}) {
   const jose = await loadJose();
   const { privateKey } = await keyMaterial();
