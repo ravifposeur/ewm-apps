@@ -18,6 +18,7 @@ class TokenStore {
     try {
       const parts = token.split('.');
       const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+
       this._claims = JSON.parse(decodeURIComponent(
         atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
       ));
@@ -568,7 +569,16 @@ screens['/health'] = async () => {
 // ROUTER
 // ============================================================================
 function navigate(path) {
-  window.location.hash = path;
+  const target = path.startsWith('/') ? path : '/' + path;
+  const current = window.location.hash.slice(1) || '';
+
+  if (current === target) {
+    // Hash sudah sama → paksa re-render manual
+    route();
+  } else {
+    // Hash beda → biarkan hashchange listener yang panggil route()
+    window.location.hash = target;
+  }
 }
 
 function matchRoute(path) {
