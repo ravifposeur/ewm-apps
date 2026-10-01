@@ -17,7 +17,8 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1:5173',
   'http://localhost:5173',       // dev web app
   'http://localhost:3000',       // dev alternative
-  'https://ewm-web.onrender.com' // production web app (ganti nanti jika diperlukan)
+  'https://ewm-web.onrender.com', // production web app (ganti nanti jika diperlukan)
+  'https://ewm-apps-production.up.railway.app/'
 ];
 
 app.use(cors({

@@ -61,6 +61,11 @@ Platform ini digunakan oleh penyedia jasa waste management untuk mengelola daur 
 
 _None. All workflows map to existing operations._
 
-## Deployment
-- Base URL: https://ewm-apps.onrender.com
-- Health: https://ewm-apps.onrender.com/health
+## Production Deployment
+
+| Service | URL | Status |
+| :--- | :--- | :--- |
+| Web App | https://web-production-xxxx.up.railway.app | (isi setelah deploy) |
+| Backend API | https://backend-production-fbc2.up.railway.app | ✅ Live |
+| JWKS Server | https://jwks-production-e785.up.railway.app | ✅ Live |
+| Health Check | https://backend-production-fbc2.up.railway.app/health | ✅ |
