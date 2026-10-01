@@ -124,43 +124,37 @@
       "username": "organizer-a",
       "enabled": true,
       "requiredActions": [],
-      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }],
-      "clientScopes": ["events:read", "events:write", "sites:approve", "rosters:read", "rosters:write"]
+      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }]
     },
     {
       "username": "organizer-b",
       "enabled": true,
       "requiredActions": [],
-      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }],
-      "clientScopes": ["events:read", "events:write", "sites:approve", "rosters:read", "rosters:write"]
+      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }]
     },
     {
       "username": "crew-a",
       "enabled": true,
       "requiredActions": [],
-      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }],
-      "clientScopes": ["events:read", "rosters:read", "collections:write"]
+      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }]
     },
     {
       "username": "crew-b",
       "enabled": true,
       "requiredActions": [],
-      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }],
-      "clientScopes": ["events:read", "rosters:read", "collections:write"]
+      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }]
     },
     {
       "username": "admin-a",
       "enabled": true,
       "requiredActions": [],
-      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }],
-      "clientScopes": ["events:read", "events:write", "rosters:read", "rosters:write", "confirmations:write"]
+      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }]
     },
     {
       "username": "admin-b",
       "enabled": true,
       "requiredActions": [],
-      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }],
-      "clientScopes": ["events:read", "events:write", "rosters:read", "rosters:write", "confirmations:write"]
+      "credentials": [{ "type": "password", "value": "Ewm-Dev-2026!", "temporary": false }]
     }
   ]
 }
